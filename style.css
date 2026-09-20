@@ -1,0 +1,540 @@
+/* ---------- Pinned floating dock ---------- */
+
+.pf-dock {
+    position: fixed;
+    z-index: 3500; /* above chat, below our own view-modal/context-menu */
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.94));
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+    min-width: 60px;
+}
+
+.pf-dock.pf-dock-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.pf-dock.pf-dock-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* Toggle-operation lock. The overlay covers the entire extension (including header and resize
+   controls), while `inert` is also applied in native.js so keyboard focus cannot change values
+   behind it. It stays visible through native verification and the final delayed order repair. */
+.pf-dock.pf-processing > :not(.pf-processing-overlay) {
+    pointer-events: none;
+    user-select: none;
+}
+
+.pf-processing-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    text-align: center;
+    cursor: wait;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.9));
+    backdrop-filter: blur(3px);
+    font-weight: 600;
+}
+
+.pf-dock.pf-processing .pf-processing-overlay { display: flex; }
+.pf-processing-overlay .fa-spinner { font-size: 1.45em; }
+
+/* While a native SillyTavern popup is open (New Prompt, Edit Prompt, native Delete's own
+   confirm, etc.), drop this panel's persistent pieces well below it — see watchNativePopups()
+   in index.js, which toggles this class the moment any such popup appears/disappears. This
+   panel's own transient overlays (context menu, View/Preview/bulk-match modals) are simply
+   closed outright at the same moment instead (closeOwnOverlays()), since there's no reason for
+   them to keep existing once a native window has the user's attention. */
+body.pf-native-popup-open .pf-dock,
+body.pf-native-popup-open .pf-restore-btn {
+    z-index: 100;
+}
+
+.pf-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 8px;
+    cursor: grab;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.pf-header:active { cursor: grabbing; }
+.pf-header-icon { opacity: 0.9; }
+.pf-header-spacer { flex: 1 1 auto; }
+
+.pf-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.pf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pf-toolbar .pf-icon-only {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.pf-toolbar .pf-toolbar-danger {
+    color: #e06666;
+}
+
+.pf-toolbar .pf-toolbar-danger:hover {
+    color: #ff5c5c;
+}
+
+/* Amber "not vetted yet" warning — distinct from the red pf-toolbar-danger used for destructive
+   actions above. Currently only Auto Filter wears this, since its live chat-triggered
+   enable/disable logic hasn't been tested enough yet to trust unattended. */
+.pf-toolbar .pf-toolbar-warning {
+    color: #e0a030;
+}
+
+.pf-toolbar .pf-toolbar-warning:hover {
+    color: #ffb400;
+}
+
+.pf-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+    padding: 6px 8px;
+    border: 1px solid #e0a030;
+    border-radius: 4px;
+    background: rgba(224, 160, 48, 0.12);
+    color: #e0a030;
+    font-weight: bold;
+    font-size: 0.85em;
+}
+
+.pf-status {
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+.pf-order-hint {
+    font-size: 0.72em;
+    opacity: 0.55;
+    line-height: 1.3;
+}
+
+#pf-tree {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/* ---------- Resize controls ---------- */
+
+.pf-resize-handle {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    cursor: nesw-resize;
+    opacity: 0.55;
+}
+
+.pf-resize-handle:hover { opacity: 1; }
+
+.pf-resize-handle::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    bottom: 4px;
+    width: 9px;
+    height: 9px;
+    border-left: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+}
+
+/* Left-docked panel: mirror the handle back to the bottom-right so it stays on the
+   panel's inner edge (facing into the chat) rather than against the screen edge. */
+.pf-dock-left .pf-resize-handle { left: auto; right: 0; cursor: nwse-resize; }
+.pf-dock-left .pf-resize-handle::before { left: auto; right: 4px; border-left: none; border-right: 2px solid currentColor; }
+
+/* Full-height strip on the inner edge — grab anywhere along it to resize width only,
+   so you can dial in exactly how much of the chat the panel covers. */
+.pf-resize-edge {
+    position: absolute;
+    top: 0;
+    bottom: 20px;
+    width: 8px;
+    cursor: ew-resize;
+    opacity: 0;
+    background: var(--active, #3ab6a3);
+    transition: opacity 0.15s ease;
+}
+
+.pf-resize-edge:hover { opacity: 0.5; }
+
+.pf-dock-right .pf-resize-edge { left: 0; }
+.pf-dock-left .pf-resize-edge { right: 0; }
+
+/* ---------- Minimize / restore ---------- */
+
+.pf-restore-btn {
+    position: fixed;
+    bottom: 20px;
+    z-index: 3500;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.94));
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    color: var(--SmartThemeBodyColor, #eee);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    font-size: 1.1em;
+}
+
+.pf-restore-btn:hover { opacity: 0.9; }
+
+/* ---------- Folder tree ---------- */
+
+.pf-folder { margin: 2px 0; }
+
+.pf-folder-row,
+.pf-prompt-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 5px;
+}
+
+.pf-folder-row:hover,
+.pf-prompt-row:hover { background: rgba(255, 255, 255, 0.06); }
+
+.pf-prompt-row[draggable="true"],
+.pf-folder-row[draggable="true"] { cursor: grab; }
+
+/* Ctrl/Cmd+click multi-select — selected rows drag together (see dnd.js). */
+.pf-folder-row.pf-selected,
+.pf-prompt-row.pf-selected {
+    background: rgba(58, 182, 163, 0.16);
+    outline: 1px solid var(--active, #3ab6a3);
+    outline-offset: -1px;
+}
+
+.pf-folder-children {
+    margin-left: 18px;
+    border-left: 1px dashed var(--SmartThemeBorderColor, #555);
+    padding-left: 6px;
+}
+
+.pf-collapse-btn { cursor: pointer; width: 14px; text-align: center; opacity: 0.8; flex-shrink: 0; }
+.pf-folder-icon { flex-shrink: 0; opacity: 0.9; }
+
+.pf-folder-name {
+    flex: 1 1 auto;
+    font-weight: 600;
+    cursor: text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-prompt-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-toggle { cursor: pointer; flex-shrink: 0; font-size: 1.1em; width: 20px; text-align: center; }
+.pf-toggle.pf-on { color: var(--active, #3ab6a3); }
+.pf-toggle.pf-off { color: var(--SmartThemeQuoteColor, #888); opacity: 0.6; }
+.pf-toggle.pf-mixed { color: goldenrod; }
+
+.pf-folder-all-toggle { width: 18px; text-align: center; padding: 0; }
+.pf-folder-all-on { color: var(--active, #3ab6a3); }
+.pf-folder-all-off { color: #e06666; }
+.pf-icon-btn.pf-folder-all-disabled { cursor: default; opacity: 0.22; }
+.pf-icon-btn.pf-folder-all-disabled:hover { opacity: 0.22; }
+
+.pf-icon-btn { cursor: pointer; opacity: 0.7; flex-shrink: 0; padding: 0 2px; }
+.pf-icon-btn:hover { opacity: 1; }
+.pf-icon-btn-danger { color: #e06666; opacity: 0.85; margin-left: 4px; }
+.pf-icon-btn-danger:hover { opacity: 1; color: #ff5c5c; }
+
+.pf-move-select { max-width: 100px; font-size: 0.75em; flex-shrink: 0; }
+
+.pf-empty-hint { opacity: 0.65; font-size: 0.85em; padding: 8px 4px; }
+
+/* Drag-and-drop zone indicators */
+.pf-drop-before { box-shadow: inset 0 2px 0 0 var(--active, #3ab6a3); }
+.pf-drop-after { box-shadow: inset 0 -2px 0 0 var(--active, #3ab6a3); }
+.pf-drop-into { outline: 1px dashed var(--active, #3ab6a3); background: rgba(58, 182, 163, 0.1); }
+
+/* ---------- Context menu ---------- */
+
+.pf-context-menu {
+    position: fixed;
+    z-index: 3700;
+    min-width: 210px;
+    max-width: 320px;
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    padding: 4px 0;
+    backdrop-filter: blur(6px);
+}
+
+.pf-context-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 14px;
+    margin: -4px 0 4px;
+    padding: 3px 0;
+    cursor: move;
+    opacity: 0.45;
+    font-size: 0.75em;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+}
+
+.pf-context-grip:hover { opacity: 0.85; }
+
+.pf-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.pf-context-item-label {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pf-context-caret { flex-shrink: 0; opacity: 0.6; font-size: 0.85em; }
+
+.pf-context-item:hover,
+.pf-context-item.pf-context-open { background: rgba(255, 255, 255, 0.08); }
+.pf-context-danger { color: #e06666; }
+.pf-context-sep { height: 1px; background: var(--SmartThemeBorderColor, #444); margin: 4px 0; }
+
+/* ---------- View (read-only) modal ---------- */
+
+.pf-view-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3800;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.pf-view-modal {
+    width: min(640px, 92vw);
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    padding: 14px;
+    gap: 10px;
+}
+
+.pf-view-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+    padding-bottom: 8px;
+}
+
+.pf-view-header b { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-view-id { font-size: 0.75em; opacity: 0.55; }
+
+.pf-view-stats {
+    font-size: 0.78em;
+    opacity: 0.7;
+}
+
+.pf-view-content {
+    flex: 1 1 auto;
+    min-height: 260px;
+    resize: none;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: 0.9em;
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.pf-view-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pf-view-hint { font-size: 0.78em; opacity: 0.6; }
+
+.pf-full-modal {
+    width: min(760px, 94vw);
+    max-height: 88vh;
+}
+
+.pf-full-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+}
+
+.pf-full-section {
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.pf-full-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+}
+
+.pf-full-section-header b { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-full-section-words { font-size: 0.85em; opacity: 0.6; flex-shrink: 0; }
+
+.pf-full-section-content {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: 0.85em;
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    padding: 8px;
+}
+
+/* ---------- Bulk enable/disable-by-match modal ---------- */
+
+.pf-bm-modal {
+    width: min(440px, 92vw);
+    max-height: 86vh;
+}
+
+.pf-bm-scope {
+    font-size: 0.78em;
+    opacity: 0.7;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+}
+
+.pf-bm-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    padding-top: 2px;
+}
+
+.pf-bm-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pf-bm-row label { font-size: 0.8em; opacity: 0.75; }
+
+.pf-bm-radio-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+}
+
+.pf-bm-radio-row label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85em;
+    opacity: 1;
+    cursor: pointer;
+}
+
+.pf-bm-actions { flex-direction: row; gap: 10px; }
+.pf-bm-actions .menu_button { flex: 1 1 auto; justify-content: center; }
+
+.pf-bm-hint {
+    font-size: 0.76em;
+    opacity: 0.65;
+    min-height: 1.2em;
+}
+
+/* ---------- Auto Filter list (reuses .pf-prompt-row for each rule's row) ---------- */
+
+#pf-af-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+#pf-af-list .pf-prompt-row { cursor: default; }
+#pf-af-list .pf-prompt-name { font-size: 0.82em; }
+#pf-af-list .pf-prompt-row.pf-drop-before { box-shadow: inset 0 2px 0 0 var(--active, #3ab6a3); }
+#pf-af-list .pf-prompt-row.pf-drop-after { box-shadow: inset 0 -2px 0 0 var(--active, #3ab6a3); }
+
+.pf-af-checklist {
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.12);
+    font-size: 0.85em;
+}
+
+@media (max-width: 1000px) {
+    .pf-dock { max-width: 92vw; }
+}
