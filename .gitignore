@@ -1,6 +1,0 @@
-node_modules/
-coverage/
-*.log
-.DS_Store
-TEST_REPORT.md
-tests/
