@@ -285,6 +285,7 @@ async function applyAutoFilter(filter, xmlGroupCache) {
 
 let autoFilterRunning = false;
 let autoFilterRerunQueued = false;
+let autoFilterIdle = Promise.resolve();
 
 /** The single entry point every trigger (chat events, manual Refresh, list edits) goes through.
  *  Re-entrancy-guarded — a chat event firing again while a previous pass is still mid-scan
@@ -303,6 +304,8 @@ async function evaluateAutoFilters() {
     if (autoFilterRunning) { autoFilterRerunQueued = true; return { ok: false, reason: 'busy' }; }
 
     autoFilterRunning = true;
+    let resolveIdle;
+    autoFilterIdle = new Promise(resolve => { resolveIdle = resolve; });
     let rulesRun = 0, prompts = 0, folders = 0;
     try {
         const xmlGroupCache = new Map(); // see xmlConditionGroups() — shared across this pass's condition checks
@@ -315,6 +318,7 @@ async function evaluateAutoFilters() {
         }
     } finally {
         autoFilterRunning = false;
+        resolveIdle();
         if (autoFilterRerunQueued) { autoFilterRerunQueued = false; evaluateAutoFilters(); }
     }
     return { ok: true, rulesRun, prompts, folders };
@@ -338,11 +342,20 @@ export function scheduleAutoFilterEval(delay = 300) {
  *  it stops reacting live to new chat messages/new chats but everything else keeps working. */
 export function tryHookChatEvents() {
     try {
-        const liveKeys = ['MESSAGE_RECEIVED', 'MESSAGE_SENT', 'MESSAGE_SWIPED', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'CHAT_CHANGED'];
+        const liveKeys = ['MESSAGE_RECEIVED', 'MESSAGE_SWIPED', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'CHAT_CHANGED'];
         for (const k of liveKeys) {
             const evt = event_types?.[k];
             if (evt) eventSource?.on?.(evt, () => scheduleAutoFilterEval());
         }
+        // ST awaits MESSAGE_SENT after adding the user message and before assembling the
+        // completion payload. This includes the new text and works for both Enter and clicks.
+        const sentEvent = event_types?.MESSAGE_SENT;
+        if (sentEvent) eventSource?.on?.(sentEvent, async () => {
+            if (!settings().autoFilterOnSendClick) { scheduleAutoFilterEval(); return; }
+            clearTimeout(autoFilterEvalTimer);
+            while (autoFilterRunning) await autoFilterIdle;
+            await evaluateAutoFilters();
+        });
         // GENERATION_STOPPED (aborted manually) / GENERATION_ENDED (finished or errored out) are
         // the documented ST signal for "the Abort request icon just reverted back to the send
         // icon" — see tryHookSendAbortIcon() below for the DOM-level detector of that same
@@ -356,47 +369,9 @@ export function tryHookChatEvents() {
     } catch { /* see note above — Auto Filter degrades to manual/edit-triggered evaluation only */ }
 }
 
-/** The two icon-driven Auto Filter triggers, on top of the live chat-event hooks above — each
- *  independently gated by its own setting (settings().autoFilterOnSendClick /
- *  autoFilterOnGenerationDone), checked fresh on every event so flipping either checkbox in the
- *  modal takes effect immediately without needing to re-hook anything:
- *   1. THE INSTANT the send icon is clicked — before it's "being processed" — a filter pass
- *      starts right away, so it has the best chance of finishing (toggling which prompts/folders
- *      are on) before SillyTavern's own click handler goes on to read the prompt list and build
- *      the actual request. This works because the listener is registered on `document` in the
- *      capture phase: a capture-phase listener on an ancestor always runs before ANY listener —
- *      capture or bubble, no matter when it was registered — bound directly to the clicked
- *      element itself, so this necessarily fires before ST's own send handler does.
- *      IMPORTANT CAVEAT (off by default — see the modal's warning banner next to its checkbox):
- *      because applying a filter (toggling prompts) is asynchronous, this can only ever START a
- *      filter pass on click — there's no way for an extension to actually block SillyTavern's own
- *      send handler until that pass finishes. On a slow filter (many rules, XML tag conditions
- *      that peek every prompt's content) the request can go out mid-toggle: partially filtered,
- *      not filtered at all, or in rare cases with prompts left in an inconsistent on/off state if
- *      a second click/rule-edit lands while the first pass is still running. Enable this only if
- *      you've confirmed your specific rules are fast enough in practice.
- *   2. The abort icon reverting back to the send icon — i.e. generation actually ending, whether
- *      it finished normally or was stopped manually. SillyTavern shows/hides these two as
- *      separate elements via plain inline `style="display:none"` rather than a class, so this is
- *      a MutationObserver on `style`/`class` watching for exactly that visibility flip (abort
- *      showing → send showing). This is intentionally independent of, and in addition to, the
- *      GENERATION_STOPPED/GENERATION_ENDED events hooked in tryHookChatEvents() above — same
- *      moment, two unrelated detection methods, so a future ST version changing one doesn't lose
- *      the other. This one carries none of trigger 1's race risk (the message has already been
- *      sent/finished by the time it fires), so it defaults to on.
- *  Both halves are wrapped defensively, same philosophy as tryHookChatEvents(): if the send/abort
- *  elements don't match SELECTORS.sendButton/abortButton on some version, this trigger quietly
- *  does nothing rather than breaking anything else — the live chat-event hooks above and the
- *  manual "Re-evaluate now" button keep working regardless. */
+/** DOM fallback for generation finishing/aborting. Pre-send evaluation is handled by
+ * the awaited MESSAGE_SENT event above, never a fire-and-forget click timer. */
 export function tryHookSendAbortIcon() {
-    try {
-        document.addEventListener('click', ev => {
-            if (!settings().autoFilterOnSendClick) return;
-            if (!ev.target?.closest?.(SELECTORS.sendButton)) return;
-            scheduleAutoFilterEval(0);
-        }, true);
-    } catch { /* best-effort, see note above */ }
-
     try {
         const isShowing = node => !!node && node.style.display !== 'none' && node.offsetParent !== null;
         let abortWasShowing = false;
@@ -533,9 +508,9 @@ export function openAutoFilterModal() {
                         <label><input type="checkbox" id="pf-af-trigger-generation-done" /> Re-evaluate when generation finishes or is aborted</label>
                     </div>
                     <div class="pf-bm-row pf-bm-radio-row">
-                        <label><input type="checkbox" id="pf-af-trigger-send-click" /> Re-evaluate the instant the send icon is clicked (before it's sent)</label>
+                        <label><input type="checkbox" id="pf-af-trigger-send-click" /> Re-evaluate before sending (wait for filters)</label>
                     </div>
-                    <div class="pf-warning-banner"><span class="fa-solid fa-triangle-exclamation"></span> The send-click trigger is a race condition by nature: an extension can start a filter pass on click but can't block SillyTavern from sending the message while that pass is still running. Depending on how many/slow your rules are, your prompt can end up fully filtered, partially filtered, not filtered at all, or — in rare cases where a second trigger lands mid-pass — with prompts left in an inconsistent on/off state, ruining the request that goes out. Only enable this if you've confirmed your specific rules are fast enough in practice.</div>
+                    <div class="pf-bm-hint">Includes the new user message and waits for enabled filters before building the API request. Applies to the send button and Enter. Large rule sets can add processing time.</div>
                 </div>
 
                 <div class="pf-bm-row">

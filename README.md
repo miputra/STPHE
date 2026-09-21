@@ -1,3 +1,7 @@
+## 3.2.1 — awaited Auto Filter before sending
+
+The optional **Re-evaluate before sending (wait for filters)** setting now uses SillyTavern's awaited message event. It includes the new user message, waits for any active filter pass, then applies the current rules before request assembly. Both Send and Enter were verified through a local OpenAI-compatible HTTP fixture. Streaming, non-streaming, group gating, abort, and error recovery were also checked. See [TEST_REPORT.md](TEST_REPORT.md) for results and limits.
+
 ## 3.2.0 — responsive toggles and filter groups
 
 Folder changes now update the native prompt model in one serialized batch, calculate context once, await the native list render, and verify every requested state. Loading ends after the updated plugin tree is rendered. There is no fixed completion delay or wait for the settings-save debounce; already-correct states do not show loading. Muted prompts retain their remembered on/off state; gray means suppressed by a folder, while yellow means a genuinely mixed folder.
@@ -408,9 +412,8 @@ Other pieces of the modal:
   - **Re-evaluate when generation finishes or is aborted** — on by default. Fires once the abort
     icon reverts back to the send icon, whether generation finished normally or you stopped it
     manually.
-  - **Re-evaluate the instant the send icon is clicked (before it's sent)** — off by default, with
-    a warning banner next to it. See "A note on the send-click trigger" below before turning this
-    on.
+  - **Re-evaluate before sending (wait for filters)** — off by default. Includes the new
+    user message and waits for enabled filters before assembling the request, for Send and Enter.
 - Each rule in the list has its own **enable/disable checkbox**, an ✏️ to load it back into the
   form above for editing, and a 🗑 to remove it.
 - **Drag a rule to reorder it** — the list runs top to bottom, so order can matter when rules'
@@ -422,41 +425,18 @@ Rules re-evaluate automatically whenever the chat changes (new message, edited, 
 or you switch to a different/new chat), best-effort — see the note below. They also re-evaluate
 the moment you add, edit, remove, reorder, or enable/disable one, or flip the master switch.
 
-On top of that, rules can re-evaluate at up to two more points around every message you send —
-each controlled by its own checkbox in the "Send/abort triggers" section above, and both can be
-on at once:
-- **The instant the abort icon reverts back to the send icon** — i.e. generation has actually
-  ended, whether it finished normally or you stopped it manually. On by default; this one carries
-  none of the risk described below, since the message has already been sent/finished by the time
-  it fires.
-- **The instant you click the send icon** — before it's sent. Off by default.
+### Before sending
 
-### A note on the send-click trigger — please read before enabling it
-
-This one is a genuine race condition, not just a "best-effort" caveat like the rest of this
-section. Applying a filter (toggling prompts/folders on/off) is asynchronous — a click can only
-*start* a filter pass; nothing in the extension API lets it *block* SillyTavern from going on to
-send the message while that pass is still running. Depending on how many rules you have, how slow
-they are (an XML-tag condition/effect peeks every prompt's content), and how the timing happens to
-land, the actual request that goes out can end up:
-- filtered exactly as intended (the common case, if your rules are fast),
-- partially filtered (some rules finished, some didn't),
-- not filtered at all (the request went out before the pass even started applying changes), or
-- in rare cases, with prompts left toggled inconsistently if a second trigger (e.g. a fast
-  double-click, or a live chat event) lands while the first pass is still mid-scan.
-
-None of this is specific to any one rule being "wrong" — it can happen with correctly-configured
-rules, purely from timing. Only turn this checkbox on if you've tested your specific rules and
-confirmed they're fast enough in practice, and keep an eye on the actual prompt list state for a
-while after enabling it. If you just want the safety net without the risk, the "generation
-finishes or is aborted" trigger above (on by default) still keeps everything correct for the *next*
-message, even if the very message that's currently in flight wasn't affected.
+When enabled, pre-send evaluation uses SillyTavern's awaited `MESSAGE_SENT` event. It waits
+for an active filter pass to finish, then evaluates the current chat including the new user
+message. Request assembly proceeds after the rule effects finish. There is no fixed wait;
+large rule sets can add actual processing time. This behavior was verified on SillyTavern
+1.18.0 through a local OpenAI-compatible endpoint using both Send and Enter.
 
 One note on live reactivity: this listens for SillyTavern's own chat events (including the
-documented `GENERATION_STOPPED`/`GENERATION_ENDED` events for the second trigger above) to know
-when to re-check conditions, plus — for the two send/abort triggers specifically — direct
-detection of the send/abort icons themselves (a click on the send icon, and a MutationObserver
-watching for the abort icon's visibility flipping back off). All of this is very standard, stable
+documented `GENERATION_STOPPED`/`GENERATION_ENDED` events) to know
+when to re-check conditions, plus a MutationObserver watching for the abort icon's visibility
+flipping back off as a generation-completion fallback. All of this is very standard, stable
 parts of SillyTavern's UI/extension API (not the kind of unconfirmed internal-settings guesswork
 some of this extension's other notes warn about), but it's still wrapped defensively — if a future
 ST version changes its event names or restructures the send/abort icons, Auto Filter simply stops

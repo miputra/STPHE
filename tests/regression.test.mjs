@@ -261,3 +261,16 @@ test('native edit reveals response configuration before opening editor',()=>{
     const calls=[];const edit={click:()=>calls.push('edit')};const row={querySelector:()=>edit};const list={querySelector:()=>row};
     const n=load('native',{SELECTORS:{promptList:'list',editAction:'edit',responsePanel:'panel',responsePanelToggle:'toggle'},CSS:{escape:x=>x},document:{querySelector:sel=>sel==='list'?list:sel==='panel'?{classList:{contains:()=>true}}:{click:()=>calls.push('drawer')},getElementById:()=>null},closeAutoFilterModal(){},closeBulkMatchModal(){},closeContextMenu(){},closeImportConflictsModal(){}},['openNativeEditor']);assert.equal(n.openNativeEditor('a'),true);assert.deepEqual(calls,['drawer','edit']);
 });
+
+test('pre-send event waits for native effects before allowing request assembly',async()=>{
+    const callbacks={};let release;const p={identifier:'p',enabled:false};
+    const s={autoFilterOnSendClick:true,autoFilters:[{enabled:true,condition:{depth:0},effect:{mode:'manual',manualPrompts:['p']},action:'enable'}],folderDisabled:{}};
+    const a=load('auto-filter',{settings:()=>s,event_types:{MESSAGE_SENT:'sent'},eventSource:{on:(key,fn)=>callbacks[key]=fn},liveCache:[p],isExcludedFromAutoFilter:()=>false,isFolderExcludedFromAutoFilter:()=>false,isFilterGroupDisabled:()=>false,isPromptLogicallyEnabled:p=>p.enabled,setPromptsLogicalState:async changes=>{await new Promise(resolve=>release=resolve);p.enabled=changes[0].enabled;}},['tryHookChatEvents']);
+    a.tryHookChatEvents();let requestAllowed=false;const pending=callbacks.sent().then(()=>{requestAllowed=true;});await new Promise(setImmediate);assert.equal(requestAllowed,false);release();await pending;assert.equal(requestAllowed,true);assert.equal(p.enabled,true);
+});
+test('pre-send event waits for an ongoing auto-filter pass then rechecks current chat',async()=>{
+    const callbacks={};let release;let calls=0;const p={identifier:'p',enabled:false};
+    const s={autoFilterOnSendClick:true,autoFilters:[{enabled:true,condition:{depth:0},effect:{mode:'manual',manualPrompts:['p']},action:'enable'}],folderDisabled:{}};
+    const a=load('auto-filter',{settings:()=>s,event_types:{MESSAGE_SENT:'sent'},eventSource:{on:(key,fn)=>callbacks[key]=fn},liveCache:[p],isExcludedFromAutoFilter:()=>false,isFolderExcludedFromAutoFilter:()=>false,isFilterGroupDisabled:()=>false,isPromptLogicallyEnabled:p=>p.enabled,setPromptsLogicalState:async changes=>{if(changes.length){calls++;if(calls===1)await new Promise(resolve=>release=resolve);p.enabled=changes[0].enabled;}}},['tryHookChatEvents','evaluateAutoFilters']);
+    a.tryHookChatEvents();const background=a.evaluateAutoFilters();await new Promise(setImmediate);s.autoFilters[0].action='disable';const sending=callbacks.sent();release();await background;await sending;assert.equal(p.enabled,false);assert.equal(calls,2);
+});

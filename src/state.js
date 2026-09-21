@@ -65,9 +65,7 @@ const DEFAULT_SETTINGS = {
                                     // from Auto Filter ONLY, independent of excludedFolders
     autoFilters: [],           // [{ id, name, enabled, condition:{matchType,value,depth}, effect:{...} }] — see "Auto Filter"
     autoFilterDisabled: false,  // master kill switch for the whole Auto Filter system
-    autoFilterOnSendClick: false, // re-evaluate the instant the send icon is clicked, before the
-                                    // message is processed — off by default; see the warning next
-                                    // to its checkbox in the modal for why
+    autoFilterOnSendClick: false, // wait for rules after the user message is added, before the request
     autoFilterOnGenerationDone: true, // re-evaluate once generation finishes or is aborted (the
                                         // abort icon reverting back to the send icon)
     matchPresets: [],            // [{ id, name, locked, scopePath, params, target }] — see "Filter presets"
