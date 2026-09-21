@@ -1,4 +1,4 @@
-import { renderTree } from './render.js';
+import { promptOrNull, renderTree } from './render.js';
 import { ROOT, isDescendantOrSelf, joinPath, moveEntryInOrder, nameOf, parentOf, rewritePathEverywhere, save, settings, toastWarn } from './state.js';
 
 // ---------- Folder mutations ----------
@@ -65,9 +65,11 @@ export function deleteFolder(path) {
         if (p && isDescendantOrSelf(p, path)) s.assignments[id] = parent || ROOT;
     }
     s.folders = s.folders.filter(f => !isDescendantOrSelf(f, path));
-    delete s.collapsed[path];
-    delete s.folderDisabled[path];
-    delete s.folderSnapshot[path];
+    for (const field of ['collapsed', 'folderDisabled', 'folderSnapshot']) {
+        for (const key of Object.keys(s[field])) {
+            if (isDescendantOrSelf(key, path)) delete s[field][key];
+        }
+    }
     for (const key of Object.keys(s.excludedFolders)) {
         if (isDescendantOrSelf(key, path)) delete s.excludedFolders[key];
     }
@@ -101,8 +103,8 @@ export function toggleCollapsed(path) {
 /** Prompts the user for a name, creates a new folder under `parentPath` positioned right after
  *  `afterEntry` in the manual sibling order (via createFolder() + moveEntryInOrder()), saves, and
  *  re-renders the tree. Used by the "New folder after this" context-menu actions. */
-export function insertNewFolderRelative(parentPath, afterEntry) {
-    const name = prompt('New folder name:');
+export async function insertNewFolderRelative(parentPath, afterEntry) {
+    const name = await promptOrNull('New folder name:');
     if (!name || !name.trim()) return;
     const path = createFolder(parentPath, name.trim());
     if (path) moveEntryInOrder({ type: 'folder', key: path }, parentPath, null, afterEntry);

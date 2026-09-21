@@ -23,6 +23,8 @@ export const ROOT = ''; // root/"Unfiled" path
 
 // ---------- Centralized selectors for native SillyTavern DOM (see design note above) ----------
 export const SELECTORS = {
+    responsePanel: '#left-nav-panel',
+    responsePanelToggle: '#leftNavDrawerIcon',
     promptList: '#completion_prompt_manager_list',
     promptItem: 'li[data-pm-identifier], li.completion_prompt_manager_prompt',
     promptName: '.prompt_manager_prompt_name_text, .completion_prompt_manager_prompt_name, .prompt-manager-name',
@@ -45,7 +47,8 @@ export const SELECTORS = {
 };
 
 const DEFAULT_SETTINGS = {
-    version: 6,
+    version: 7,
+    filterGroups: {},
     folders: [],        // explicit list of folder paths, e.g. ["Jailbreak", "Jailbreak/NSFW"]
     assignments: {},     // { promptIdentifier: "Folder/Sub" }
     order: {},            // { parentPath: [{type:'folder'|'prompt', key}, ...] } manual sibling order
@@ -100,6 +103,7 @@ export function settings() {
     if (typeof s.excludedFolders !== 'object' || !s.excludedFolders) s.excludedFolders = {};
     if (typeof s.excludedAutoPrompts !== 'object' || !s.excludedAutoPrompts) s.excludedAutoPrompts = {};
     if (typeof s.excludedAutoFolders !== 'object' || !s.excludedAutoFolders) s.excludedAutoFolders = {};
+    if (!s.filterGroups || typeof s.filterGroups !== 'object') s.filterGroups = {};
     if (!Array.isArray(s.autoFilters)) s.autoFilters = [];
     if (typeof s.autoFilterDisabled !== 'boolean') s.autoFilterDisabled = false;
     if (typeof s.autoFilterOnSendClick !== 'boolean') s.autoFilterOnSendClick = false;

@@ -4,7 +4,7 @@ import { closeBulkMatchModal } from './bulk-match.js';
 import { closeContextMenu } from './context-menu.js';
 import { assignPrompt } from './folders.js';
 import { closeImportConflictsModal, restorePromptsFromImport } from './import-export.js';
-import { liveCache, promptByIdentifier, renderTree, scheduleRenderTree } from './render.js';
+import { liveCache, promptByIdentifier, renderTree } from './render.js';
 import { SELECTORS, el, escapeHtml, flattenPromptOrder, moveEntryInOrder, save, settings, toastError, toastWarn } from './state.js';
 
 // ---------- Reading / driving the live Prompt Manager DOM ----------
@@ -28,11 +28,6 @@ function extractName(li) {
     return text || li.getAttribute('data-pm-identifier') || '(unnamed prompt)';
 }
 
-/** Finds the clickable enable/disable toggle within a prompt row `li`. */
-function findToggleEl(li) {
-    return li.querySelector(SELECTORS.toggleAction);
-}
-
 /** Finds the clickable edit (pencil) icon within a prompt row `li`, if this prompt is editable. */
 function findEditEl(li) {
     return li.querySelector(SELECTORS.editAction);
@@ -40,10 +35,10 @@ function findEditEl(li) {
 
 /** Reads a prompt row's current enabled/disabled state directly from its DOM classes. */
 function isEnabled(li) {
-    // Deliberately separate from findToggleEl(): the clickable wrapper and the element that
+    // The clickable wrapper and the element that
     // actually carries the fa-toggle-on/fa-toggle-off class may not be the same node (e.g. a
     // wrapper span around an icon). Search the whole row for whichever element has the state
-    // class, rather than trusting findToggleEl's target to have it directly — that mismatch was
+    // class, rather than trusting the click target to have it directly — that mismatch was
     // causing state reads to always come back the same regardless of the prompt's real state.
     const iconEl = li.querySelector('.fa-toggle-on, .fa-toggle-off');
     if (iconEl) return iconEl.classList.contains('fa-toggle-on');
@@ -87,264 +82,93 @@ function indexPromptRows() {
     return rows;
 }
 
-/** Clicks the native toggle for `identifier` only if it isn't already in `desiredEnabled` state.
- *  Returns false if the prompt or its toggle control can't be found. Single-shot — see
- *  toggleWithRetry() for the version that verifies and retries. */
-function toggleNativePrompt(identifier, desiredEnabled) {
-    const li = findLiElement(identifier);
-    if (!li) return false;
-    if (isEnabled(li) === desiredEnabled) return true;
-    const toggle = findToggleEl(li);
-    if (!toggle) return false;
-    toggle.click();
-    return true;
-}
+let toggleQueue = Promise.resolve();
+let queuedToggles = 0;
 
-let nativeToggleSettleTimer = null;
-let nativeToggleOperationId = 0;
-
-/** Shows or hides the panel-wide processing lock. Pointer blocking is backed by `inert` on every
- *  interactive dock layer except the overlay itself, preventing keyboard navigation or an
- *  already-focused control from changing extension state while native prompt clicks are still
- *  being applied. */
 function setNativeToggleBusy(busy, promptCount = 1) {
     const dock = document.getElementById('pf-dock');
     if (!dock) return;
-
     dock.classList.toggle('pf-processing', busy);
-    dock.setAttribute('aria-busy', busy ? 'true' : 'false');
+    dock.setAttribute('aria-busy', String(busy));
     for (const child of dock.children) {
         if (child.id === 'pf-processing-overlay') continue;
-        if (busy) child.setAttribute('inert', '');
-        else child.removeAttribute('inert');
+        child.toggleAttribute('inert', busy);
     }
-
-    const overlay = document.getElementById('pf-processing-overlay');
-    overlay?.setAttribute('aria-hidden', busy ? 'false' : 'true');
+    document.getElementById('pf-processing-overlay')?.setAttribute('aria-hidden', String(!busy));
     const label = document.getElementById('pf-processing-label');
-    if (label && busy) {
-        label.textContent = promptCount === 1
-            ? 'Applying prompt change…'
-            : `Applying ${promptCount} prompt changes…`;
-    }
+    if (label && busy) label.textContent = `Applying ${promptCount} prompt change${promptCount === 1 ? '' : 's'}…`;
 }
 
-/** Starts a new toggle transaction and invalidates any older delayed completion callback. */
-function beginNativeToggleMutation(promptCount) {
-    clearTimeout(nativeToggleSettleTimer);
-    const operationId = ++nativeToggleOperationId;
-    setNativeToggleBusy(true, promptCount);
-    return operationId;
+export function toggleWithRetry(identifier, enabled) {
+    return toggleManyWithRetry([{ identifier, enabled }]);
 }
 
-/** Lets the busy overlay paint before a large synchronous series of native `.click()` calls. */
-function runAfterBusyPaint(callback) {
-    if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => setTimeout(callback, 0));
-    } else {
-        setTimeout(callback, 0);
-    }
-}
-
-/** Checks a condition once per painted frame and completes as soon as it becomes true. The
- *  timeout is only a retry safety limit for a native handler that never settles; it is not a
- *  minimum wait. A timer-based frame fallback keeps this usable in older/webview environments,
- *  while the safety timer also prevents a background tab (where rAF may pause) from staying
- *  locked forever. */
-function pollFramesUntil(check, onReady, onExpired, maxWaitMs = 96) {
-    let finished = false;
-    let frameHandle = null;
-    let safetyHandle = null;
-    const usesAnimationFrame = typeof requestAnimationFrame === 'function';
-
-    const cancelFrame = () => {
-        if (frameHandle === null) return;
-        if (usesAnimationFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frameHandle);
-        else clearTimeout(frameHandle);
-        frameHandle = null;
-    };
-    const finish = callback => {
-        if (finished) return;
-        finished = true;
-        cancelFrame();
-        clearTimeout(safetyHandle);
-        callback();
-    };
-    const scheduleFrame = callback => {
-        frameHandle = usesAnimationFrame
-            ? requestAnimationFrame(callback)
-            : setTimeout(callback, 16);
-    };
-    const checkFrame = () => {
-        if (finished) return;
-        if (check()) {
-            finish(onReady);
-            return;
-        }
-        scheduleFrame(checkFrame);
-    };
-
-    scheduleFrame(checkFrame);
-    safetyHandle = setTimeout(() => finish(onExpired), maxWaitMs);
-}
-
-/** Ends a failed operation immediately, but only if it is still the current transaction. */
-function abortNativeToggleMutation(operationId) {
-    if (operationId !== nativeToggleOperationId) return;
-    clearTimeout(nativeToggleSettleTimer);
-    setNativeToggleBusy(false);
-}
-
-/** Finishes the actual native toggle operation and unlocks the extension immediately. The first
- *  pass updates order and queues the normal tree refresh; the second, lightweight pass runs in
- *  the background after ST has settled and repairs the specific late-rebuild case where the
- *  final toggled prompt otherwise lands at the bottom. The delayed pass computes the desired
- *  order when it runs, so it can never restore a stale order if the user drags or refiles
- *  something during the settling window. It deliberately does not keep the GUI locked: by this
- *  point the requested enabled states have already been verified. */
-function finishNativeToggleMutation(operationId) {
-    if (operationId !== nativeToggleOperationId) return;
-    syncNativePromptOrder(flattenPromptOrder());
-    scheduleRenderTree();
-    setNativeToggleBusy(false);
-
-    clearTimeout(nativeToggleSettleTimer);
-    nativeToggleSettleTimer = setTimeout(() => {
-        if (operationId !== nativeToggleOperationId) return;
-        syncNativePromptOrder(flattenPromptOrder());
-        scheduleRenderTree();
-    }, 450);
-}
-
-/** Clicks the native toggle and verifies it actually landed on the desired state shortly after,
- *  retrying a couple of times if not. This is what makes a single click in our panel reliable
- *  even if the native list's re-render timing is a little unpredictable. */
-export function toggleWithRetry(identifier, desiredEnabled, attempt = 0, operationId = null) {
-    if (attempt === 0 && operationId === null) {
-        if (!findPromptListEl()) {
-            toastError('Could not find the native Prompt Manager list.');
-            scheduleRenderTree();
-            return;
-        }
-        operationId = beginNativeToggleMutation(1);
-        runAfterBusyPaint(() => toggleWithRetry(identifier, desiredEnabled, 0, operationId));
-        return;
-    }
-
-    const ok = toggleNativePrompt(identifier, desiredEnabled);
-    if (!ok) {
-        toastError('Could not find this prompt in the native Prompt Manager list.');
-        abortNativeToggleMutation(operationId);
-        scheduleRenderTree();
-        return;
-    }
-
-    // Most ST versions update the row synchronously inside `.click()`. Complete those common
-    // cases now; otherwise observe each following paint and stop on the first matching frame.
-    const immediateLi = findLiElement(identifier);
-    if (immediateLi && isEnabled(immediateLi) === desiredEnabled) {
-        finishNativeToggleMutation(operationId);
-        return;
-    }
-
-    pollFramesUntil(
-        () => {
-            const li = findLiElement(identifier);
-            return !!li && isEnabled(li) === desiredEnabled;
-        },
-        () => finishNativeToggleMutation(operationId),
-        () => {
-            const li = findLiElement(identifier);
-            if (li && isEnabled(li) !== desiredEnabled && attempt < 3) {
-                toggleWithRetry(identifier, desiredEnabled, attempt + 1, operationId);
-            } else {
-                finishNativeToggleMutation(operationId);
-            }
-        },
-    );
-}
-
-/** Batched counterpart to toggleWithRetry() for folder master switches. It preserves the same
- *  native-control + verify/retry behavior and performs only one final tree render for the entire
- *  folder. Each apply click resolves its row from the live list, exactly like the original path,
- *  because SillyTavern may replace those rows while a folder operation is still running; only the
- *  non-mutating verification pass uses a one-scan index.
- *
- *  `changes` is an array of {identifier, enabled}; if the same identifier appears more than once,
- *  the last requested state wins. */
-export function toggleManyWithRetry(changes, attempt = 0, operationId = null) {
-    const desiredById = new Map();
-    for (const change of changes || []) {
-        if (change?.identifier) desiredById.set(change.identifier, !!change.enabled);
-    }
-    if (desiredById.size === 0) {
-        scheduleRenderTree();
-        return;
-    }
-
-    if (!findPromptListEl()) {
-        toastError('Could not find the native Prompt Manager list.');
-        if (operationId !== null) abortNativeToggleMutation(operationId);
-        scheduleRenderTree();
-        return;
-    }
-
-    if (attempt === 0 && operationId === null) {
-        operationId = beginNativeToggleMutation(desiredById.size);
-        const normalizedChanges = [...desiredById].map(([identifier, enabled]) => ({ identifier, enabled }));
-        runAfterBusyPaint(() => toggleManyWithRetry(normalizedChanges, 0, operationId));
-        return;
-    }
-
-    let missingControl = false;
-    for (const [identifier, desiredEnabled] of desiredById) {
-        // Do not cache `li` across clicks. The native handler is allowed to rebuild the whole
-        // prompt list synchronously, so the next identifier must be looked up in the current DOM.
-        if (!toggleNativePrompt(identifier, desiredEnabled)) missingControl = true;
-    }
-    if (missingControl) toastError('Could not find one or more prompts in the native Prompt Manager list.');
-
-    const allStatesMatch = () => {
+/** Serialize batches against the native model, never against stale DOM snapshots. A single
+ * context calculation and awaited list render replace N racing click-triggered renders. */
+export function toggleManyWithRetry(changes) {
+    const desired = new Map((changes || []).filter(x => x?.identifier).map(x => [x.identifier, !!x.enabled]));
+    if (!desired.size) return Promise.resolve(true);
+    if (!queuedToggles && cachedOaiModule?.promptManager) {
+        const manager = cachedOaiModule.promptManager;
         const rows = indexPromptRows();
-        return rows !== null && [...desiredById].every(([identifier, desiredEnabled]) => {
-            const li = rows.get(identifier);
-            return !!li && isEnabled(li) === desiredEnabled;
-        });
-    };
-
-    // A small folder commonly settles entirely within the synchronous native click handlers.
-    // Complete it now; otherwise observe every following paint instead of sleeping for a fixed
-    // interval before looking again.
-    const immediatelyComplete = allStatesMatch();
-    if (immediatelyComplete) {
-        finishNativeToggleMutation(operationId);
-        return;
+        if (rows && [...desired].every(([id, enabled]) => {
+            const entry = manager.getPromptOrderEntry(manager.activeCharacter, id);
+            return entry && !!entry.enabled === enabled && rows.has(id) && isEnabled(rows.get(id)) === enabled;
+        })) {
+            renderTree();
+            return Promise.resolve(true);
+        }
     }
-
-    pollFramesUntil(
-        allStatesMatch,
-        () => finishNativeToggleMutation(operationId),
-        () => {
-            const currentRows = indexPromptRows();
-            const pending = [];
-            if (currentRows) {
-                for (const [identifier, desiredEnabled] of desiredById) {
-                    const li = currentRows.get(identifier);
-                    // Match toggleWithRetry(): a row that disappears after the click does not
-                    // keep retrying indefinitely; the final render reconciles with the live list.
-                    if (li && isEnabled(li) !== desiredEnabled) {
-                        pending.push({ identifier, enabled: desiredEnabled });
-                    }
-                }
+    queuedToggles++;
+    setNativeToggleBusy(true, desired.size);
+    const operation = toggleQueue.then(async () => {
+        const mod = await getOaiModule();
+        const manager = mod?.promptManager;
+        if (!manager?.activeCharacter || typeof manager.renderPromptManagerListItems !== 'function') {
+            throw new Error('The native Prompt Manager is unavailable. Open AI Response Configuration and retry.');
+        }
+        const entries = [...desired].map(([id, enabled]) => {
+            const entry = manager.getPromptOrderEntry(manager.activeCharacter, id);
+            if (!entry) throw new Error(`Prompt is no longer in the active preset: ${id}`);
+            return { id, enabled, entry };
+        });
+        const changed = entries.filter(x => !!x.entry.enabled !== x.enabled);
+        if (changed.length) {
+            const counts = manager.tokenHandler.getCounts();
+            for (const { id, enabled, entry } of changed) {
+                entry.enabled = enabled;
+                counts[id] = null;
             }
-
-            if (pending.length > 0 && attempt < 3) {
-                toggleManyWithRetry(pending, attempt + 1, operationId);
-            } else {
-                finishNativeToggleMutation(operationId);
-            }
-        },
-    );
+            // Persist through ST's own service hook, once for the entire batch.
+            // Native toggles schedule debounced persistence without waiting for its timer.
+            // Completion here means the model and rendered controls agree, not that the
+            // unrelated settings-save debounce has expired.
+            void manager.saveServiceSettings()?.catch(error => toastError(`Could not save prompt settings: ${error.message}`));
+            try { await manager.tryGenerate(); }
+            catch (error) { console.warn('[Prompt Folders] Token calculation failed', error); }
+        }
+        const beforeRender = indexPromptRows();
+        if (changed.length || !beforeRender || entries.some(({ id, enabled }) => !beforeRender.has(id) || isEnabled(beforeRender.get(id)) !== enabled)) {
+            await manager.renderPromptManager();
+            await manager.renderPromptManagerListItems();
+            manager.makeDraggable();
+        }
+        const rows = indexPromptRows();
+        if (!rows || entries.some(({ id, enabled, entry }) => !!entry.enabled !== enabled || !rows.has(id) || isEnabled(rows.get(id)) !== enabled)) {
+            throw new Error('The native prompt list did not finish applying the requested states. Refresh and retry.');
+        }
+        return true;
+    }).catch(error => {
+        toastError(error.message || 'Could not apply prompt changes.');
+        return false;
+    }).finally(() => {
+        queuedToggles--;
+        // Render before unlocking, so there is no stale visual frame after loading disappears.
+        try { renderTree(); }
+        finally { if (!queuedToggles) setNativeToggleBusy(false); }
+    });
+    toggleQueue = operation;
+    return operation;
 }
 
 /** Opens SillyTavern's own prompt editor for this identifier (view + edit content, role, etc.).
@@ -356,6 +180,8 @@ export function openNativeEditor(identifier) {
     const editBtn = findEditEl(li);
     if (!editBtn) return false;
     closeOwnOverlays();
+    const panel = document.querySelector(SELECTORS.responsePanel);
+    if (panel?.classList.contains('closedDrawer')) document.querySelector(SELECTORS.responsePanelToggle)?.click();
     editBtn.click();
     return true;
 }
@@ -588,22 +414,18 @@ export function closeOwnOverlays() {
  *   2. Briefly opening the native editor, reading its content field, and closing it again.
  *  (1) is strongly preferred because it never opens any real editor at all — nothing to
  *  accidentally leave open, nothing the user could edit by mistake. */
-let oaiModuleAttempted = false;
+let oaiModulePromise = null;
 let cachedOaiModule = null;
 
 /** Attempts (once — result cached) to dynamically import SillyTavern's own openai.js module, for
  *  direct read access to oai_settings.prompts / prompt_order. Returns the module, or `null` if
  *  the import failed or didn't shape up as expected (see the strategy note above). */
 export async function getOaiModule() {
-    if (oaiModuleAttempted) return cachedOaiModule;
-    oaiModuleAttempted = true;
-    try {
-        const mod = await import('../../../../openai.js');
-        if (mod && mod.oai_settings && Array.isArray(mod.oai_settings.prompts)) cachedOaiModule = mod;
-    } catch {
-        cachedOaiModule = null;
-    }
-    return cachedOaiModule;
+    oaiModulePromise ??= import('../../../../openai.js').then(mod => {
+        if (mod?.oai_settings && Array.isArray(mod.oai_settings.prompts)) cachedOaiModule = mod;
+        return cachedOaiModule;
+    }).catch(() => null);
+    return oaiModulePromise;
 }
 
 /** Reads a prompt's content straight from SillyTavern's own settings module, if getOaiModule()
@@ -654,18 +476,16 @@ export function findPromptOrderEntry(oai) {
     return best;
 }
 
-/** Forces SillyTavern's Prompt Manager to re-render from the current underlying data, using a
- *  harmless toggle-off/toggle-on on a prompt already in the list (an action already confirmed
- *  reliable) rather than guessing at an internal render function name. */
-export function forceNativeRerender(callback) {
-    const anchor = liveCache[0];
-    if (!anchor) { setTimeout(callback, 300); return; }
-    const wasEnabled = anchor.enabled;
-    toggleNativePrompt(anchor.identifier, !wasEnabled);
-    setTimeout(() => {
-        toggleNativePrompt(anchor.identifier, wasEnabled);
-        setTimeout(callback, 250);
-    }, 150);
+/** Refresh the native list directly, including when no anchor prompt remains after deletion. */
+export async function forceNativeRerender(callback) {
+    const manager = (await getOaiModule())?.promptManager;
+    if (!manager) { toastError('The native Prompt Manager is unavailable.'); return; }
+    try {
+        await manager.renderPromptManager();
+        await manager.renderPromptManagerListItems();
+        manager.makeDraggable();
+        callback?.();
+    } catch (error) { toastError(`Could not refresh the native prompt list: ${error.message}`); }
 }
 
 /** Creates a new prompt directly and inserts it into the active list at the requested position,

@@ -1,3 +1,4 @@
+import { buildFilterGroups, isFilterGroupDisabled } from './filter-groups.js';
 // ---------- Bulk enable/disable by content match (XML tag / word / regex) ----------
 //
 import { AUTO_MATCH_TYPES, autoMatchDef, evaluateAutoCondition } from './auto-filter.js';
@@ -503,10 +504,10 @@ async function evaluateChatPresetEffect(preset) {
  *  application: given a list of matched prompt objects and a target mode ('prompt' /
  *  'folder-last' / 'folder-all'), actually flips the right thing(s) to `desiredEnabled` and
  *  reports back how many prompts vs. folders were touched, for the caller's status text. */
-function applyTargetToggle(targets, targetMode, desiredEnabled) {
+async function applyTargetToggle(targets, targetMode, desiredEnabled) {
     if (targets.length === 0) return { prompts: 0, folders: 0 };
     if (targetMode !== 'folder-last' && targetMode !== 'folder-all') {
-        setPromptsLogicalState(targets.map(p => ({ identifier: p.identifier, enabled: desiredEnabled })));
+        await setPromptsLogicalState(targets.map(p => ({ identifier: p.identifier, enabled: desiredEnabled })));
         return { prompts: targets.length, folders: 0 };
     }
     const s = settings();
@@ -516,7 +517,7 @@ function applyTargetToggle(targets, targetMode, desiredEnabled) {
         if (targetMode === 'folder-all') { for (const anc of ancestorChain(direct)) folderPaths.add(anc); }
         else folderPaths.add(direct);
     }
-    for (const path of folderPaths) setFolderMaster(path, !desiredEnabled);
+    for (const path of folderPaths) await setFolderMaster(path, !desiredEnabled);
     return { prompts: 0, folders: folderPaths.size };
 }
 
@@ -1137,13 +1138,13 @@ export function openBulkMatchModal(scopePath) {
         showBulkMatchValuePreview(regexValueSelect.value);
     });
 
-    function runBulkAction(desiredEnabled) {
+    async function runBulkAction(desiredEnabled) {
         const targetId = matchedSelect.value;
         const targetMode = document.querySelector('input[name="pf-bm-target"]:checked')?.value || 'prompt';
         const targets = targetId === '__all__' ? bulkMatchState.matched : bulkMatchState.matched.filter(p => p.identifier === targetId);
         if (targets.length === 0) return;
 
-        const out = applyTargetToggle(targets, targetMode, desiredEnabled);
+        const out = await applyTargetToggle(targets, targetMode, desiredEnabled);
         hint.textContent = targetMode === 'prompt'
             ? `${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.prompts} prompt${out.prompts === 1 ? '' : 's'}.`
             : `${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.folders} folder${out.folders === 1 ? '' : 's'}.`;
@@ -1152,11 +1153,11 @@ export function openBulkMatchModal(scopePath) {
     // Manually chosen prompts/folders (chat source, "Manually choose…" selection mode) bypass the
     // matched-prompts/target-radio machinery entirely — prompts and folders were picked directly,
     // so each is just flipped straight to the desired state.
-    function runManualAction(desiredEnabled) {
+    async function runManualAction(desiredEnabled) {
         const promptChanges = [...bulkMatchState.manualPrompts].map(identifier => ({ identifier, enabled: desiredEnabled }));
         let promptCount = promptChanges.length, folderCount = 0;
-        setPromptsLogicalState(promptChanges);
-        for (const path of bulkMatchState.manualFolders) { setFolderMaster(path, !desiredEnabled); folderCount++; }
+        await setPromptsLogicalState(promptChanges);
+        for (const path of bulkMatchState.manualFolders) { await setFolderMaster(path, !desiredEnabled); folderCount++; }
         hint.textContent = `${desiredEnabled ? 'Enabled' : 'Disabled'} ${promptCount} prompt${promptCount === 1 ? '' : 's'} and ${folderCount} folder${folderCount === 1 ? '' : 's'}.`;
     }
 
@@ -1186,6 +1187,7 @@ export function openBulkMatchModal(scopePath) {
     function renderPresetList() {
         const s = settings();
         presetListEl.innerHTML = '';
+        const groups = buildFilterGroups(presetListEl, 'matchPresets', s.matchPresets, renderPresetList);
         if (!s.matchPresets.length) {
             presetListEl.appendChild(el('div', 'pf-empty-hint', { text: 'No saved presets yet — set up a match above (Apply is optional), pick a target, then "Save".' }));
             return;
@@ -1209,13 +1211,13 @@ export function openBulkMatchModal(scopePath) {
             const delBtn = el('span', 'pf-icon-btn fa-solid fa-trash', { title: 'Remove this preset' });
 
             function refreshLockUi() {
-                const locked = !!preset.locked;
+                const locked = !!preset.locked || isFilterGroupDisabled('matchPresets', preset);
                 for (const btn of [enableBtn, disableBtn]) {
                     btn.style.opacity = locked ? '0.3' : '';
                     btn.style.pointerEvents = locked ? 'none' : '';
                 }
-                enableBtn.title = locked ? 'Locked — uncheck the lock to enable' : 'Enable matching prompts/folders now';
-                disableBtn.title = locked ? 'Locked — uncheck the lock to disable' : 'Disable matching prompts/folders now';
+                enableBtn.title = locked ? 'Locked or group off — unlock the preset and enable its groups' : 'Enable matching prompts/folders now';
+                disableBtn.title = locked ? 'Locked or group off — unlock the preset and enable its groups' : 'Disable matching prompts/folders now';
             }
             refreshLockUi();
 
@@ -1229,11 +1231,11 @@ export function openBulkMatchModal(scopePath) {
             // "Not a toggle" — these re-run the preset's saved match spec fresh against current
             // prompt content every click, rather than replaying a stale cached result.
             async function runPreset(desiredEnabled) {
-                if (preset.locked) return;
+                if (preset.locked || isFilterGroupDisabled('matchPresets', preset)) return;
                 hint.textContent = `Running preset "${preset.name}"…`;
                 const result = await evaluateFilterParams(preset.scopePath, preset.params);
                 if (result.error) { hint.textContent = `Preset "${preset.name}"'s regex is no longer valid.`; return; }
-                const out = applyTargetToggle(result.matched, preset.target, desiredEnabled);
+                const out = await applyTargetToggle(result.matched, preset.target, desiredEnabled);
                 hint.textContent = preset.target === 'prompt'
                     ? `${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.prompts} prompt${out.prompts === 1 ? '' : 's'} via "${preset.name}".`
                     : `${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.folders} folder${out.folders === 1 ? '' : 's'} via "${preset.name}".`;
@@ -1253,7 +1255,7 @@ export function openBulkMatchModal(scopePath) {
             row.appendChild(enableBtn);
             row.appendChild(disableBtn);
             row.appendChild(delBtn);
-            presetListEl.appendChild(row);
+            groups.add(row, preset);
         }
     }
 
@@ -1344,6 +1346,7 @@ export function openBulkMatchModal(scopePath) {
     function renderChatPresetList() {
         const s = settings();
         chatPresetListEl.innerHTML = '';
+        const groups = buildFilterGroups(chatPresetListEl, 'chatMatchPresets', s.chatMatchPresets, renderChatPresetList);
         if (!s.chatMatchPresets.length) {
             chatPresetListEl.appendChild(el('div', 'pf-empty-hint', { text: 'No saved chat presets yet — fill in a chat condition and a selection above (no need to Check chat or Find prompts first), then "Save".' }));
             return;
@@ -1367,13 +1370,13 @@ export function openBulkMatchModal(scopePath) {
             const delBtn = el('span', 'pf-icon-btn fa-solid fa-trash', { title: 'Remove this preset' });
 
             function refreshLockUi() {
-                const locked = !!preset.locked;
+                const locked = !!preset.locked || isFilterGroupDisabled('chatMatchPresets', preset);
                 for (const btn of [enableBtn, disableBtn]) {
                     btn.style.opacity = locked ? '0.3' : '';
                     btn.style.pointerEvents = locked ? 'none' : '';
                 }
-                enableBtn.title = locked ? 'Locked — uncheck the lock to enable' : 'Enable the selected prompts/folders now';
-                disableBtn.title = locked ? 'Locked — uncheck the lock to disable' : 'Disable the selected prompts/folders now';
+                enableBtn.title = locked ? 'Locked or group off — unlock the preset and enable its groups' : 'Enable the selected prompts/folders now';
+                disableBtn.title = locked ? 'Locked or group off — unlock the preset and enable its groups' : 'Disable the selected prompts/folders now';
             }
             refreshLockUi();
 
@@ -1388,7 +1391,7 @@ export function openBulkMatchModal(scopePath) {
             // against current chat/prompt content every click — same "not a toggle, not a cached
             // replay" philosophy as the Filter presets' runPreset above.
             async function runChatPreset(desiredEnabled) {
-                if (preset.locked) return;
+                if (preset.locked || isFilterGroupDisabled('chatMatchPresets', preset)) return;
                 hint.textContent = `Running chat preset "${preset.name}"…`;
                 const conditionMet = await evaluateAutoCondition(preset.condition, new Map());
                 const effResult = await evaluateChatPresetEffect(preset);
@@ -1398,12 +1401,12 @@ export function openBulkMatchModal(scopePath) {
                 if (effResult.mode === 'manual') {
                     const promptChanges = effResult.prompts.map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
                     let promptCount = promptChanges.length, folderCount = 0;
-                    setPromptsLogicalState(promptChanges);
-                    for (const path of effResult.folders) { setFolderMaster(path, !desiredEnabled); folderCount++; }
+                    await setPromptsLogicalState(promptChanges);
+                    for (const path of effResult.folders) { await setFolderMaster(path, !desiredEnabled); folderCount++; }
                     hint.textContent = `${condBit}${desiredEnabled ? 'Enabled' : 'Disabled'} ${promptCount} prompt${promptCount === 1 ? '' : 's'} and ${folderCount} folder${folderCount === 1 ? '' : 's'} via "${preset.name}".`;
                     return;
                 }
-                const out = applyTargetToggle(effResult.matched, effResult.target, desiredEnabled);
+                const out = await applyTargetToggle(effResult.matched, effResult.target, desiredEnabled);
                 hint.textContent = effResult.target === 'prompt'
                     ? `${condBit}${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.prompts} prompt${out.prompts === 1 ? '' : 's'} via "${preset.name}".`
                     : `${condBit}${desiredEnabled ? 'Enabled' : 'Disabled'} ${out.folders} folder${out.folders === 1 ? '' : 's'} via "${preset.name}".`;
@@ -1423,7 +1426,7 @@ export function openBulkMatchModal(scopePath) {
             row.appendChild(enableBtn);
             row.appendChild(disableBtn);
             row.appendChild(delBtn);
-            chatPresetListEl.appendChild(row);
+            groups.add(row, preset);
         }
     }
 

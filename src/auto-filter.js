@@ -1,3 +1,4 @@
+import { buildFilterGroups, isFilterGroupDisabled } from './filter-groups.js';
 // ---------- Auto Filter (condition ⇒ effect rules, toolbar-only) ----------
 //
 import { getContext } from '../../../../extensions.js';
@@ -228,7 +229,7 @@ async function computeAutoEffectTargets(effect) {
 /** Applies one rule's single triggered/not-triggered verdict to its whole effect set — skipping
  *  anything already in the desired state, so a steady-state re-evaluation (nothing actually
  *  changed in chat) is a genuine no-op rather than re-clicking every native toggle every time. */
-function applyAutoEffect(targetSet, desiredEnabled) {
+async function applyAutoEffect(targetSet, desiredEnabled) {
     const s = settings();
     let promptCount = 0, folderCount = 0;
 
@@ -236,11 +237,11 @@ function applyAutoEffect(targetSet, desiredEnabled) {
         const promptChanges = targetSet.prompts
             .filter(p => isPromptLogicallyEnabled(p, s) !== desiredEnabled)
             .map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
-        setPromptsLogicalState(promptChanges);
+        await setPromptsLogicalState(promptChanges);
         promptCount = promptChanges.length;
         for (const path of targetSet.folders) {
             const desiredOff = !desiredEnabled;
-            if (!!s.folderDisabled[path] !== desiredOff) { setFolderMaster(path, desiredOff); folderCount++; }
+            if (!!s.folderDisabled[path] !== desiredOff) { await setFolderMaster(path, desiredOff); folderCount++; }
         }
         return { promptCount, folderCount };
     }
@@ -249,7 +250,7 @@ function applyAutoEffect(targetSet, desiredEnabled) {
         const promptChanges = targetSet.prompts
             .filter(p => isPromptLogicallyEnabled(p, s) !== desiredEnabled)
             .map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
-        setPromptsLogicalState(promptChanges);
+        await setPromptsLogicalState(promptChanges);
         promptCount = promptChanges.length;
         return { promptCount, folderCount };
     }
@@ -262,7 +263,7 @@ function applyAutoEffect(targetSet, desiredEnabled) {
     }
     for (const path of folderPaths) {
         const desiredOff = !desiredEnabled;
-        if (!!s.folderDisabled[path] !== desiredOff) { setFolderMaster(path, desiredOff); folderCount++; }
+        if (!!s.folderDisabled[path] !== desiredOff) { await setFolderMaster(path, desiredOff); folderCount++; }
     }
     return { promptCount, folderCount: folderPaths.size };
 }
@@ -306,7 +307,7 @@ async function evaluateAutoFilters() {
     try {
         const xmlGroupCache = new Map(); // see xmlConditionGroups() — shared across this pass's condition checks
         for (const filter of s.autoFilters) {
-            if (filter.enabled === false) continue;
+            if (filter.enabled === false || isFilterGroupDisabled('autoFilters', filter)) continue;
             rulesRun++;
             const counts = await applyAutoFilter(filter, xmlGroupCache);
             prompts += counts.promptCount;
@@ -520,7 +521,6 @@ export function openAutoFilterModal() {
                 <b>Auto Filter</b>
                 <span class="pf-icon-btn fa-solid fa-xmark" id="pf-af-close" title="Close"></span>
             </div>
-            <div class="pf-warning-banner"><span class="fa-solid fa-triangle-exclamation"></span> UNTESTED!! Auto Filter's live chat-triggered enable/disable hasn't been vetted enough to trust unattended — double-check its effects on your prompts.</div>
             <div class="pf-bm-scope">Each rule below is a condition ⇒ effect pair: when the condition shows up in recent chat, the effect turns on — when it doesn't, the effect turns off. Reacts live to new messages and new chats (best-effort — use Re-evaluate now if it doesn't on this SillyTavern version).</div>
             <div class="pf-bm-body" style="max-height:70vh; overflow-y:auto">
                 <div class="pf-bm-row pf-bm-radio-row">
@@ -621,7 +621,7 @@ export function openAutoFilterModal() {
                 <div class="pf-bm-hint" id="pf-af-hint"></div>
 
                 <div class="pf-bm-row" style="border-top:1px solid var(--SmartThemeBorderColor, #444); padding-top:8px">
-                    <label>Filter list — drag to reorder, runs top to bottom</label>
+                    <label>Filter list — numbered execution order; drag rules to reorder</label>
                     <div id="pf-af-list"></div>
                 </div>
                 <div class="pf-bm-row pf-bm-actions">
@@ -836,6 +836,7 @@ export function openAutoFilterModal() {
     function renderList() {
         const s = settings();
         listEl.innerHTML = '';
+        const groups = buildFilterGroups(listEl, 'autoFilters', s.autoFilters, renderList, () => scheduleAutoFilterEval(0));
         if (!s.autoFilters.length) { listEl.appendChild(el('div', 'pf-empty-hint', { text: 'No auto filters yet.' })); return; }
         for (const filter of s.autoFilters) {
             const row = el('div', 'pf-prompt-row');
@@ -854,7 +855,7 @@ export function openAutoFilterModal() {
             });
 
             const info = el('span', 'pf-prompt-name');
-            info.innerHTML = `<b>${escapeHtml(filter.name || 'Filter')}</b><br><span style="opacity:.7; font-size:0.85em">${escapeHtml(describeAutoFilter(filter))}</span>`;
+            info.innerHTML = `<b>${s.autoFilters.indexOf(filter) + 1}. ${escapeHtml(filter.name || 'Filter')}</b><br><span style="opacity:.7; font-size:0.85em">${escapeHtml(describeAutoFilter(filter))}</span>`;
 
             const editBtn = el('span', 'pf-icon-btn fa-solid fa-pen', { title: 'Edit this filter' });
             editBtn.addEventListener('click', () => loadFilterIntoForm(filter));
@@ -876,7 +877,7 @@ export function openAutoFilterModal() {
             row.appendChild(delBtn);
 
             attachAutoFilterDnd(row, filter.id, () => { renderList(); scheduleAutoFilterEval(0); });
-            listEl.appendChild(row);
+            groups.add(row, filter);
         }
     }
 

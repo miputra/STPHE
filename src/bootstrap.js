@@ -224,7 +224,7 @@ export function watchPromptManager() {
         return true;
     };
 
-    if (attach()) return;
+    attach();
 
     const bodyObserver = new MutationObserver(() => {
         if (attach()) bodyObserver.disconnect();

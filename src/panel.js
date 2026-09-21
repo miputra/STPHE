@@ -5,7 +5,7 @@ import { showContextMenu } from './context-menu.js';
 import { createFolder } from './folders.js';
 import { exportFolderStructure, importFolderStructure, importFolderStructureMerge } from './import-export.js';
 import { requestNewPromptAfter, showFullPreview } from './native.js';
-import { attachTreeBackgroundDeselect, openRemoveAllMenu, promptOrNull, renderTree, searchTerm } from './render.js';
+import { attachTreeBackgroundDeselect, openRemoveAllMenu, promptOrNull, renderTree, setSearchTerm } from './render.js';
 import { ROOT, el, save, settings } from './state.js';
 
 // ---------- Pinned floating panel ----------
@@ -48,7 +48,7 @@ function panelHtml() {
             <div class="menu_button menu_button_icon pf-icon-only" id="pf-bulk-match" title="Filter: enable/disable prompts by content match (XML tag / word / regex)">
                 <i class="fa-solid fa-filter"></i>
             </div>
-            <div class="menu_button menu_button_icon pf-icon-only pf-toolbar-warning" id="pf-auto-filter" title="Auto Filter: enable/disable prompts automatically based on recent chat content — UNTESTED!! use with caution">
+            <div class="menu_button menu_button_icon pf-icon-only" id="pf-auto-filter" title="Auto Filter: enable/disable prompts automatically based on recent chat content">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
             <div class="menu_button menu_button_icon pf-icon-only" id="pf-import-export" title="Import / Export a folder structure as JSON">
@@ -253,8 +253,8 @@ export function buildDock() {
     document.getElementById('pf-shrink').addEventListener('click', () => adjustSize(-40, -60));
 
     document.getElementById('pf-refresh').addEventListener('click', () => { renderTree(); scheduleAutoFilterEval(200); });
-    document.getElementById('pf-new-folder').addEventListener('click', () => {
-        const name = promptOrNull('New top-level folder name:');
+    document.getElementById('pf-new-folder').addEventListener('click', async () => {
+        const name = await promptOrNull('New top-level folder name:');
         if (name) { createFolder('', name); renderTree(); }
     });
     document.getElementById('pf-new-prompt').addEventListener('click', () => requestNewPromptAfter(ROOT, null));
@@ -271,7 +271,7 @@ export function buildDock() {
     });
     document.getElementById('pf-remove-all').addEventListener('click', () => openRemoveAllMenu(document.getElementById('pf-remove-all')));
     document.getElementById('pf-search').addEventListener('input', ev => {
-        searchTerm = ev.target.value || '';
+        setSearchTerm(ev.target.value);
         renderTree();
     });
     attachTreeBackgroundDeselect(document.getElementById('pf-tree'));

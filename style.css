@@ -538,3 +538,16 @@ body.pf-native-popup-open .pf-restore-btn {
 @media (max-width: 1000px) {
     .pf-dock { max-width: 92vw; }
 }
+
+/* Muted content is remembered ON, not pending or partially applied. */
+.pf-toggle.pf-suppressed { color: var(--SmartThemeBodyColor, #aaa); opacity: .45; }
+.pf-filter-group { margin-top: 6px; border-left: 1px solid #7775; }
+.pf-filter-group-children { margin-left: 14px; }
+.pf-filter-group-children[hidden] { display: none; }
+.pf-filter-group .pf-folder-row { flex-wrap: wrap; }
+.pf-filter-group .menu_button { padding: 3px 6px; min-width: 24px; }
+.pf-filter-group-muted > .pf-prompt-name { opacity: .5; }
+
+.pf-group-name-form { display: flex; gap: 6px; margin: 8px 0; }
+.pf-group-name-form input { min-width: 0; flex: 1; }
+.pf-filter-group-unfiled { margin-top: 8px; }

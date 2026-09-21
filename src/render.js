@@ -1,3 +1,4 @@
+import { Popup } from '../../../../popup.js';
 import { scheduleAutoFilterEval } from './auto-filter.js';
 import { openBulkMatchModal } from './bulk-match.js';
 import { showContextMenu } from './context-menu.js';
@@ -89,6 +90,7 @@ export let liveCache = [];
 /** Current text typed into the dock's search box; empty string means "no filter". Exported as a
  *  live binding for panel.js's search input handler to write to. */
 export let searchTerm = '';
+export function setSearchTerm(value) { searchTerm = value || ''; }
 
 /** True when prompt `p` is currently suppressed by an independently muted containing folder.
  *  ROOT represents only the Unfiled bucket, not an ancestor of every named folder; the shared
@@ -182,9 +184,9 @@ export function setPromptsLogicalState(changes) {
         const p = byId.get(identifier);
         if (!p) continue;
         const enabled = effectiveNativePromptState(p, s);
-        if (!!p.enabled !== enabled) nativeChanges.push({ identifier, enabled });
+        nativeChanges.push({ identifier, enabled });
     }
-    if (nativeChanges.length > 0) toggleManyWithRetry(nativeChanges);
+    if (nativeChanges.length > 0) return toggleManyWithRetry(nativeChanges);
     else renderTree();
 }
 
@@ -489,9 +491,9 @@ function renderMoveSelect(identifier, currentPath) {
         select.appendChild(opt);
     }
     select.appendChild(el('option', null, { value: '__new__', text: '➕ New folder…' }));
-    select.addEventListener('change', () => {
+    select.addEventListener('change', async () => {
         if (select.value === '__new__') {
-            const name = prompt('New folder name (nested example: Jailbreak/NSFW):');
+            const name = await promptOrNull('New folder name (nested example: Jailbreak/NSFW):');
             const finalPath = (name || '').trim();
             if (finalPath) {
                 const segments = finalPath.split('/').filter(Boolean);
@@ -523,7 +525,7 @@ function renderPromptRow(p, parentPath) {
     const logicalEnabled = isPromptLogicallyEnabled(p);
     const suppressed = isPromptSuppressed(p);
     const toggleClass = logicalEnabled
-        ? `fa-toggle-on ${suppressed ? 'pf-mixed' : 'pf-on'}`
+        ? `fa-toggle-on ${suppressed ? 'pf-suppressed' : 'pf-on'}`
         : 'fa-toggle-off pf-off';
     const toggleTitle = logicalEnabled
         ? (suppressed
@@ -634,9 +636,8 @@ function clearIntersectingFolderMasterState(path, s) {
 function applyEffectiveNativeStates(affected, s) {
     const nativeChanges = affected
         .map(p => ({ identifier: p.identifier, enabled: effectiveNativePromptState(p, s), current: !!p.enabled }))
-        .filter(change => change.enabled !== change.current)
         .map(({ identifier, enabled }) => ({ identifier, enabled }));
-    if (nativeChanges.length > 0) toggleManyWithRetry(nativeChanges);
+    if (nativeChanges.length > 0) return toggleManyWithRetry(nativeChanges);
     else renderTree();
 }
 
@@ -662,7 +663,7 @@ export function setFolderMaster(path, desiredOff) {
         delete s.folderSnapshot[path];
     }
     save();
-    applyEffectiveNativeStates(affected, s);
+    return applyEffectiveNativeStates(affected, s);
 }
 
 /** Force control used by the two dedicated one-click folder buttons. Unlike the restore-style
@@ -674,7 +675,7 @@ export function setFolderAll(path, enabled) {
     clearIntersectingFolderMasterState(path, s);
     for (const p of affected) s.promptDesired[p.identifier] = !!enabled;
     save();
-    applyEffectiveNativeStates(affected, s);
+    return applyEffectiveNativeStates(affected, s);
 }
 
 /** Folder toggle flips only this folder's independent native mute layer. */
@@ -700,14 +701,14 @@ function renderFolderToggle(path) {
         effective = 'off';
         title = 'No prompts in this folder yet';
     } else if (ancestorMuted && state !== 'off') {
-        effective = 'mixed';
+        effective = 'suppressed';
         title = 'This folder has intended enabled content, but an ancestor folder is muting it';
     } else {
         effective = state;
         title = 'Mute this folder natively without changing its visible content toggles';
     }
 
-    const cls = effective === 'on' ? 'fa-toggle-on pf-on' : effective === 'mixed' ? 'fa-toggle-on pf-mixed' : 'fa-toggle-off pf-off';
+    const cls = effective === 'on' ? 'fa-toggle-on pf-on' : effective === 'suppressed' ? 'fa-toggle-on pf-suppressed' : effective === 'mixed' ? 'fa-toggle-on pf-mixed' : 'fa-toggle-off pf-off';
     const toggle = el('span', `pf-toggle fa-solid ${cls}`, { title });
 
     if (state === null && !masterOff) {
@@ -762,8 +763,8 @@ function renderFolder(path, depth, parentPath) {
 
     if (path !== ROOT) {
         nameEl.title = 'Double-click to rename';
-        nameEl.addEventListener('dblclick', () => {
-            const newName = prompt('Rename folder:', nameOf(path));
+        nameEl.addEventListener('dblclick', async () => {
+            const newName = await promptOrNull('Rename folder:', nameOf(path));
             if (newName && newName.trim() && newName.trim() !== nameOf(path)) {
                 renameFolder(path, newName.trim());
                 renderTree();
@@ -818,14 +819,14 @@ function renderFolder(path, depth, parentPath) {
     menuBtn.addEventListener('click', ev => {
         ev.stopPropagation();
         const items = [
-            { label: '📁 New subfolder', action: () => { createFolder(path, promptOrNull('New subfolder name:')); s.collapsed[path] = false; save(); renderTree(); } },
+            { label: '📁 New subfolder', action: async () => { createFolder(path, await promptOrNull('New subfolder name:')); s.collapsed[path] = false; save(); renderTree(); } },
             { label: '➕ New prompt inside', action: () => requestNewPromptAfter(path, null) },
             { label: '🎯 Filter this folder by content…', action: () => openBulkMatchModal(path) },
         ];
         if (path !== ROOT) {
             items.push('separator');
-            items.push({ label: '✎ Rename folder', action: () => {
-                const newName = prompt('Rename folder:', nameOf(path));
+            items.push({ label: '✎ Rename folder', action: async () => {
+                const newName = await promptOrNull('Rename folder:', nameOf(path));
                 if (newName && newName.trim() && newName.trim() !== nameOf(path)) { renameFolder(path, newName.trim()); renderTree(); }
             } });
             items.push({ label: '📤 Export this folder', action: () => exportFolder(path) });
@@ -878,10 +879,10 @@ function renderFolder(path, depth, parentPath) {
     return wrap;
 }
 
-/** Thin wrapper around the browser's `prompt()` that returns the trimmed answer, or `null` if
+/** Native input dialog that returns the trimmed answer, or `null` if
  *  the user cancelled or entered only whitespace — saves every caller from repeating that check. */
-export function promptOrNull(msg) {
-    const v = prompt(msg);
+export async function promptOrNull(msg, initial = '') {
+    const v = await Popup.show.input('Prompt Folders', msg, initial);
     return v && v.trim() ? v.trim() : null;
 }
 

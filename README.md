@@ -1,3 +1,15 @@
+## 3.2.0 — responsive toggles and filter groups
+
+Folder changes now update the native prompt model in one serialized batch, calculate context once, await the native list render, and verify every requested state. Loading ends after the updated plugin tree is rendered. There is no fixed completion delay or wait for the settings-save debounce; already-correct states do not show loading. Muted prompts retain their remembered on/off state; gray means suppressed by a folder, while yellow means a genuinely mixed folder.
+
+Saved content filters, chat filters, and Auto Filter each have their own folder-style groups. Use **＋ Group** to create a group, **＋** on a group to create a subgroup, and the move selector or drag-and-drop to move filters/groups. Groups can be collapsed, renamed, muted, and deleted while keeping their filters. Muting preserves individual rule checkboxes and preset locks. Auto Filter priority is shown by rule numbers; grouping does not change execution priority. Full exports now include rules, presets, and groups.
+
+Also fixed search, nested-folder deletion cleanup, nested import paths, the native-list fallback watcher, folder-name dialogs, empty-list refresh, and opening the native editor from a closed configuration drawer.
+
+Run `node tests/regression.test.mjs` from this plugin directory. See [TEST_REPORT.md](TEST_REPORT.md) for coverage and limits. This directory has its own Git repository; the parent SillyTavern repository is not part of these commits.
+
+---
+
 # Prompt Folders (SillyTavern extension)
 
 Organizes your Chat Completion "pinned" prompts (the entries in the Prompt Manager list —

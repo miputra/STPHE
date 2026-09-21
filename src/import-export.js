@@ -51,6 +51,13 @@ export async function exportFolderStructure() {
     const data = {
         exportedBy: 'prompt-folders',
         exportedAt: new Date().toISOString(),
+        filterGroups: s.filterGroups,
+        matchPresets: s.matchPresets,
+        chatMatchPresets: s.chatMatchPresets,
+        autoFilters: s.autoFilters,
+        autoFilterDisabled: s.autoFilterDisabled,
+        autoFilterOnSendClick: s.autoFilterOnSendClick,
+        autoFilterOnGenerationDone: s.autoFilterOnGenerationDone,
         folders: s.folders,
         assignments: s.assignments,
         order: s.order,
@@ -454,6 +461,26 @@ export async function restorePromptsFromImport(data) {
  *  per-folder, appending any imported entry not already present rather than replacing the array
  *  outright. Nothing already in your settings is removed, touched, or reassigned. */
 function mergeFolderStructure(s, data) {
+    for (const key of ['matchPresets', 'chatMatchPresets', 'autoFilters']) {
+        if (!Array.isArray(data[key])) continue;
+        const ids = new Set(s[key].map(item => item.id));
+        for (const item of data[key]) if (item?.id && !ids.has(item.id)) { s[key].push(item); ids.add(item.id); }
+    }
+    if (data.filterGroups && typeof data.filterGroups === 'object') {
+        s.filterGroups ??= {};
+        for (const key of ['matchPresets', 'chatMatchPresets', 'autoFilters']) {
+            const imported = data.filterGroups[key];
+            if (!Array.isArray(imported?.folders)) continue;
+            const local = s.filterGroups[key] ??= { folders: [], collapsed: {}, disabled: {} };
+            local.folders = [...new Set([...local.folders, ...imported.folders.filter(p => typeof p === 'string')])];
+            for (const field of ['collapsed', 'disabled']) {
+                for (const [path, value] of Object.entries(imported[field] || {})) {
+                    if (!Object.hasOwn(local[field], path)) local[field][path] = !!value;
+                }
+            }
+        }
+    }
+
     if (Array.isArray(data.folders)) {
         const existing = new Set(s.folders);
         for (const f of data.folders) {
@@ -559,6 +586,13 @@ export function importFolderStructure() {
         if (data.excludedFolders && typeof data.excludedFolders === 'object') s.excludedFolders = data.excludedFolders;
         if (data.excludedAutoPrompts && typeof data.excludedAutoPrompts === 'object') s.excludedAutoPrompts = data.excludedAutoPrompts;
         if (data.excludedAutoFolders && typeof data.excludedAutoFolders === 'object') s.excludedAutoFolders = data.excludedAutoFolders;
+        for (const key of ['matchPresets', 'chatMatchPresets', 'autoFilters']) {
+            if (Array.isArray(data[key])) s[key] = data[key];
+        }
+        if (data.filterGroups && typeof data.filterGroups === 'object') s.filterGroups = data.filterGroups;
+        for (const key of ['autoFilterDisabled', 'autoFilterOnSendClick', 'autoFilterOnGenerationDone']) {
+            if (typeof data[key] === 'boolean') s[key] = data[key];
+        }
         save();
         renderTree();
         window.toastr?.success?.('Folder structure imported (replaced).');
@@ -597,7 +631,7 @@ export function importFolderStructureMerge() {
  *  "root — don't remap anything" (used when the anchor itself lives at the top level). */
 function remapImportDataToParent(data, parentPath) {
     if (!parentPath) return data;
-    const remap = p => joinPath(parentPath, p || '');
+    const remap = p => p ? joinPath(parentPath, p) : parentPath;
     const out = { ...data };
     if (Array.isArray(data.folders)) out.folders = data.folders.map(remap);
     if (data.assignments && typeof data.assignments === 'object') {
