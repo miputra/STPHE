@@ -80,10 +80,6 @@ In SillyTavern, open **Extensions → Install extension** and enter `https://git
 
 Folder changes apply to the native prompt list, verify their states, then repaint the hierarchy before unlocking. The integration was checked with **SillyTavern 1.18.0**. Large presets can take time. Reordering and native UI integration are best-effort across versions; verify important prompt sequencing in AI Response Configuration after reloading. [Troubleshooting →](docs/troubleshooting.html)
 
-![Documentation source map](docs/assets/docs-files.svg)
-
-The static documentation lives in `docs/`; it needs no build dependencies. See [GitHub Pages publishing](docs/publishing.html) for deployment and local preview, and the [detailed reference](docs/reference.md) for implementation caveats and earlier release notes.
-
 Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
 
 If you like the project, you can also buy me a coffee.
