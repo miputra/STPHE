@@ -888,7 +888,7 @@ function renderFolder(path, depth, parentPath) {
 /** Native input dialog that returns the trimmed answer, or `null` if
  *  the user cancelled or entered only whitespace — saves every caller from repeating that check. */
 export async function promptOrNull(msg, initial = '') {
-    const v = await Popup.show.input('Prompt Folders', msg, initial);
+    const v = await Popup.show.input('STPHE', msg, initial);
     return v && v.trim() ? v.trim() : null;
 }
 

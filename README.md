@@ -1,3 +1,22 @@
+# Silly-Tavern-Prompt-Hierarchy-Expanded (STPHE)
+
+A prompt hierarchy, saved filter preset groups, and Auto Filter for SillyTavern. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
+
+**[Read the documentation](https://miputra.github.io/STPHE-Documentation/index.html)** · [Getting started](https://miputra.github.io/STPHE-Documentation/getting-started.html) · [GitHub Pages publishing](https://miputra.github.io/STPHE-Documentation/publishing.html)
+
+Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
+
+## Donations
+
+- **BEP-20:** `0xE122d7d44604d59b27Ca3FAA44Fc1Da94CE0aE03`
+- **Solana:** `C8A5J9w7UkXeLVeCWhpP47SPCPvnuS55RJWybzFhB3jF`
+
+## Documentation website
+
+The `docs/` directory contains the complete static documentation website: navigation, search, light/dark themes, screenshots, and feature guides. `.github/workflows/pages.yml` publishes it with GitHub Pages once the repository has Pages configured to use GitHub Actions. No build dependencies are required. Existing installation directories can retain the old `prompt-folders` name.
+
+---
+
 ## 3.2.2 — large-tree rendering and immediate saved names
 
 Toggle and name changes now update existing rows instead of rebuilding every move selector. Unchanged refreshes preserve the tree. Loading remains active through native verification and the next tree paint, without a fixed completion timer. Native list replacements and text edits are observed immediately; saved names are read from the native model after its Save handler runs.
@@ -22,7 +41,7 @@ Run `node tests/regression.test.mjs` from this plugin directory. See [TEST_REPOR
 
 ---
 
-# Prompt Folders (SillyTavern extension)
+# STPHE (SillyTavern extension)
 
 Organizes your Chat Completion "pinned" prompts (the entries in the Prompt Manager list —
 Main Prompt, Jailbreak, custom prompts, etc.) into folders and subfolders — every folder

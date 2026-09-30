@@ -24,7 +24,7 @@ function panelHtml() {
     <div class="pf-header" id="pf-drag-handle">
         <span class="pf-header-icon fa-solid fa-folder-tree"></span>
 
-        <b>Prompt Folders</b>
+        <b>STPHE</b>
         <span class="pf-header-spacer"></span>
         <span class="pf-icon-btn fa-solid fa-up-right-and-down-left-from-center" id="pf-grow" title="Make panel bigger"></span>
         <span class="pf-icon-btn fa-solid fa-down-left-and-up-right-to-center" id="pf-shrink" title="Make panel smaller"></span>
@@ -205,7 +205,7 @@ function makeResizable(dock, handle, { widthOnly = false } = {}) {
  *  it reopens the dock. No-ops if it already exists. */
 function buildRestoreButton() {
     if (document.getElementById('pf-restore-btn')) return;
-    const btn = el('div', 'pf-restore-btn', { title: 'Show Prompt Folders' });
+    const btn = el('div', 'pf-restore-btn', { title: 'Show STPHE' });
     btn.id = 'pf-restore-btn';
     btn.innerHTML = '<i class="fa-solid fa-folder-tree"></i>';
     document.body.appendChild(btn);

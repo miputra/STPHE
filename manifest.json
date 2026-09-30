@@ -1,12 +1,12 @@
 {
-    "display_name": "Prompt Folders",
+    "display_name": "Silly-Tavern-Prompt-Hierarchy-Expanded (STPHE)",
     "loading_order": 100,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "community",
-    "version": "3.2.2",
+    "author": "miputra",
+    "version": "3.3.0",
     "homePage": "",
     "auto_update": false
 }

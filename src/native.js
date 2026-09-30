@@ -145,7 +145,7 @@ export function toggleManyWithRetry(changes) {
             // unrelated settings-save debounce has expired.
             void manager.saveServiceSettings()?.catch(error => toastError(`Could not save prompt settings: ${error.message}`));
             try { await manager.tryGenerate(); }
-            catch (error) { console.warn('[Prompt Folders] Token calculation failed', error); }
+            catch (error) { console.warn('[STPHE] Token calculation failed', error); }
         }
         const beforeRender = indexPromptRows();
         if (changed.length || !beforeRender || entries.some(({ id, enabled }) => !beforeRender.has(id) || isEnabled(beforeRender.get(id)) !== enabled)) {

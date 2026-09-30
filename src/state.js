@@ -1,4 +1,4 @@
-// Prompt Folders — organizes Chat Completion "pinned" prompts (Prompt Manager entries)
+// STPHE — organizes Chat Completion "pinned" prompts (Prompt Manager entries)
 // into folders/subfolders (each with its own on/off toggle at every depth), with
 // drag-and-drop reordering of both prompts and folders, add/delete/rename, and
 // independent view (read-only) / edit (native) actions — all from a resizable panel
