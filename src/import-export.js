@@ -551,7 +551,7 @@ function pickAndReadImportFile(onFolderData) {
             const hasPromptData = data && typeof data === 'object'
                 && (Array.isArray(data.prompts) || Array.isArray(data.prompt_order));
             if (!hasFolderData && !hasPromptData) {
-                toastError('Could not import: this doesn\'t look like a Prompt Folders export, or a compatible prompt list export.');
+                toastError('Could not import: this doesn\'t look like a STPHE export, or a compatible prompt list export.');
                 return;
             }
 
