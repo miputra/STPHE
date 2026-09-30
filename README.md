@@ -86,10 +86,8 @@ The static documentation lives in `docs/`; it needs no build dependencies. See [
 
 Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
 
-<details>
-<summary>If you like the project, you can also buy me a coffee.</summary>
+If you like the project, you can also buy me a coffee.
 
 - **BEP-20:** `0xE122d7d44604d59b27Ca3FAA44Fc1Da94CE0aE03`
 - **Solana:** `C8A5J9w7UkXeLVeCWhpP47SPCPvnuS55RJWybzFhB3jF`
 
-</details>
