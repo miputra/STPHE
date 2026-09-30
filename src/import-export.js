@@ -530,8 +530,12 @@ function pickAndReadImportFile(onFolderData) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json';
+    input.hidden = true;
+    document.body.appendChild(input);
+    input.addEventListener('cancel', () => input.remove(), { once: true });
     input.addEventListener('change', () => {
         const file = input.files?.[0];
+        input.remove();
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {

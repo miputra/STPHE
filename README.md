@@ -1,3 +1,11 @@
+## 3.2.2 — large-tree rendering and immediate saved names
+
+Toggle and name changes now update existing rows instead of rebuilding every move selector. Unchanged refreshes preserve the tree. Loading remains active through native verification and the next tree paint, without a fixed completion timer. Native list replacements and text edits are observed immediately; saved names are read from the native model after its Save handler runs.
+
+Saved **Filter presets** and **Chat filter presets** have a clearly labeled **＋ Preset group** button. Groups support nesting, moving, collapsing, renaming and muting while retaining individual preset locks.
+
+Live tested on the running SillyTavern 1.18.0 app with 500 added prompts in 61 nested folders: mute/restore, independent subfolder mute, native rename, and saved-preset grouping across reload. Completion checks found the final toggle state already displayed; click calls took about 2.7 seconds including native processing and browser tooling. A saved rename appeared in the first check (309 ms). These are observations for this fixture, not a guarantee for every machine or larger preset. 41 local regression tests passed. Local test fixtures, screenshots and the detailed report remain outside Git according to this repository's ignore rules.
+
 ## 3.2.1 — awaited Auto Filter before sending
 
 The optional **Re-evaluate before sending (wait for filters)** setting now uses SillyTavern's awaited message event. It includes the new user message, waits for any active filter pass, then applies the current rules before request assembly. Both Send and Enter were verified through a local OpenAI-compatible HTTP fixture. Streaming, non-streaming, group gating, abort, and error recovery were also checked. See [TEST_REPORT.md](TEST_REPORT.md) for results and limits.

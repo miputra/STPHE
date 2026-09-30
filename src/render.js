@@ -80,8 +80,8 @@ function attachSelectionToggle(row, entry) {
 // of truth: this extension's own folder settings (structure, assignments, order — see
 // state.js) and a fresh snapshot of the live Prompt Manager DOM (`liveCache`, refreshed by
 // renderTree() on every call via native.js's readLivePrompts()). Every user action in the tree
-// (toggle, rename, move, delete, exclude, ...) ends by calling renderTree() again to reflect
-// the new state — this module does not do incremental DOM patching.
+// (toggle, rename, move, delete, exclude, ...) ends by calling renderTree() again.
+// Value-only updates patch existing rows; structural edits rebuild them.
 
 /** Snapshot of the live Prompt Manager prompts, refreshed at the top of every renderTree() call.
  *  Exported (as a live binding) so other modules can read "what prompts currently exist" without
@@ -200,7 +200,7 @@ export function setPromptLogicalState(identifier, enabled) {
  *  queued here, since they already make the queued refresh obsolete. */
 let scheduledRenderTimer = null;
 export function scheduleRenderTree(delay = 0) {
-    clearTimeout(scheduledRenderTimer);
+    if (scheduledRenderTimer !== null) return;
     scheduledRenderTimer = setTimeout(() => {
         scheduledRenderTimer = null;
         renderTree();
@@ -216,7 +216,8 @@ export function promptByIdentifier(id) {
 /** Returns the live prompts (from `liveCache`) that are directly assigned to folder `path` —
  *  not including prompts in subfolders. */
 export function promptsInFolder(path) {
-    return liveCache.filter(p => (settings().assignments[p.identifier] || ROOT) === path);
+    const s = settings();
+    return liveCache.filter(p => (s.assignments[p.identifier] || ROOT) === path);
 }
 
 /** Every live prompt (recursively) assigned anywhere under `path` — the folder itself or any
@@ -518,10 +519,7 @@ function renderMoveSelect(identifier, currentPath) {
 /** Builds one prompt's row: its toggle, name, exclude/auto-exclude buttons, view/edit buttons,
  *  the "more actions" context-menu button, and its move-to-folder select — wires up all their
  *  handlers, attaches drag-and-drop, and returns the finished row element. */
-function renderPromptRow(p, parentPath) {
-    const row = el('div', 'pf-prompt-row');
-    row.dataset.identifier = p.identifier;
-
+function renderPromptToggle(p) {
     const logicalEnabled = isPromptLogicallyEnabled(p);
     const suppressed = isPromptSuppressed(p);
     const toggleClass = logicalEnabled
@@ -536,7 +534,15 @@ function renderPromptRow(p, parentPath) {
             : 'Click to enable');
 
     const toggle = el('span', `pf-toggle fa-solid ${toggleClass}`, { title: toggleTitle });
-    toggle.addEventListener('click', () => setPromptLogicalState(p.identifier, !logicalEnabled));
+    toggle.addEventListener('click', () => setPromptLogicalState(p.identifier, !isPromptLogicallyEnabled(p)));
+    return toggle;
+}
+
+function renderPromptRow(p, parentPath) {
+    const row = el('div', 'pf-prompt-row');
+    row.dataset.identifier = p.identifier;
+
+    const toggle = renderPromptToggle(p);
 
     const name = el('span', 'pf-prompt-name', { text: p.name, title: p.name });
 
@@ -892,6 +898,34 @@ export async function promptOrNull(msg, initial = '') {
  *  and finally re-orders the native list to match this extension's folder order
  *  (flattenPromptOrder() + reorderNativeList()). Safe to call even if the dock isn't built yet or
  *  the Prompt Manager isn't currently rendered (shows an explanatory empty-state message instead). */
+let renderedStructure = null;
+let renderedContainer = null;
+let renderedValues = null;
+
+// Names and enabled states do not change row structure. Preserve the large move selectors,
+// event handlers, scroll position and DOM nodes when only these values change.
+function treeStructureKey(live, s) {
+    return JSON.stringify([live.map(p => [p.identifier, p.editable, searchTerm ? p.name : null]),
+        s.folders, s.assignments, s.order, s.collapsed, s.excludedPrompts, s.excludedFolders,
+        s.excludedAutoPrompts, s.excludedAutoFolders, searchTerm, selectionEntries()]);
+}
+function patchTree(container) {
+    const byId = new Map(liveCache.map(p => [p.identifier, p]));
+    const patchToggle = (old, next) => {
+        if (old.className !== next.className) old.className = next.className;
+        if (old.title !== next.title) old.title = next.title;
+    };
+    for (const row of container.querySelectorAll('.pf-prompt-row')) {
+        const p = byId.get(row.dataset.identifier);
+        if (!p) continue;
+        patchToggle(row.querySelector('.pf-toggle'), renderPromptToggle(p));
+        const name = row.querySelector('.pf-prompt-name');
+        if (name.textContent !== p.name) { name.textContent = p.name; name.title = p.name; }
+    }
+    for (const row of container.querySelectorAll('.pf-folder-row')) {
+        patchToggle(row.querySelector('.pf-toggle'), renderFolderToggle(row.dataset.folderPath));
+    }
+}
 export function renderTree() {
     if (scheduledRenderTimer !== null) {
         clearTimeout(scheduledRenderTimer);
@@ -903,6 +937,8 @@ export function renderTree() {
 
     const live = readLivePrompts();
     if (live === null) {
+        renderedStructure = null;
+        renderedValues = null;
         container.innerHTML = '';
         container.appendChild(el('div', 'pf-empty-hint', {
             text: 'Prompt Manager not found. Switch to a Chat Completion API and open "AI Response Configuration" at least once, then click Refresh.',
@@ -911,7 +947,8 @@ export function renderTree() {
         return;
     }
 
-    liveCache = live;
+    const previous = new Map(liveCache.map(p => [p.identifier, p]));
+    liveCache = live.map(p => Object.assign(previous.get(p.identifier) || {}, p));
     const s = settings();
     reconcilePromptDesiredStates(live, s);
     const intendedEnabledCount = live.filter(p => isPromptLogicallyEnabled(p, s)).length;
@@ -921,8 +958,16 @@ export function renderTree() {
         status.textContent = `${live.length} prompt${live.length === 1 ? '' : 's'} in the current preset · ${intendedEnabledCount} enabled${activeSuffix}.`;
     }
 
-    container.innerHTML = '';
-    container.appendChild(renderFolder(ROOT, 0, null));
+    const structure = treeStructureKey(live, s);
+    const values = JSON.stringify([live.map(p => [p.name, p.enabled]), s.promptDesired, s.folderDisabled, s.folderSnapshot]);
+    if (renderedContainer === container && renderedStructure === structure && container.firstChild) {
+        if (renderedValues !== values) patchTree(container);
+    } else {
+        container.replaceChildren(renderFolder(ROOT, 0, null));
+        renderedContainer = container;
+        renderedStructure = structure;
+    }
+    renderedValues = values;
 
     // Keep both SillyTavern's underlying active order and its visible native list in sync with
     // what's shown here top-to-bottom. Persisting the data as part of an ordinary render also

@@ -49,7 +49,9 @@ export function buildFilterGroups(container, key, items, refresh, onChange = () 
         state.folders.push(path);
         commit();
     });
-    container.append(button('＋ Group', 'New filter group', () => create()));
+    const addGroup = button(key === 'autoFilters' ? '＋ Group' : '＋ Preset group', 'New filter group', () => create());
+    addGroup.classList.add('pf-group-add');
+    container.append(addGroup);
     const unfiled = el('div', 'pf-filter-group-unfiled');
     const unfiledHeader = el('div', 'pf-folder-row', { text: '📥 Unfiled — drop filters here' });
     const unfiledRows = el('div');

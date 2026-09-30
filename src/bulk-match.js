@@ -717,6 +717,7 @@ export function openBulkMatchModal(scopePath) {
                 </div>
                 <div class="pf-bm-row">
                     <label>Filter presets</label>
+                    <div class="pf-bm-hint">Organize saved presets into groups and subgroups. Turning a group off blocks its presets without changing their locks.</div>
                     <div id="pf-bm-preset-list"></div>
                 </div>
                 </div>
@@ -731,6 +732,7 @@ export function openBulkMatchModal(scopePath) {
                 <div class="pf-bm-hint">Saved as-is — the word/tag doesn't need to currently show up in chat, and "Select prompts to affect" doesn't need to have found anything yet. Enable/Disable below re-check both fresh each time.</div>
                 <div class="pf-bm-row">
                     <label>Chat filter presets</label>
+                    <div class="pf-bm-hint">Organize saved chat presets into groups and subgroups with the button below.</div>
                     <div id="pf-bm-chat-preset-list"></div>
                 </div>
                 </div>

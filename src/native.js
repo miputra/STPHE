@@ -55,7 +55,7 @@ export function readLivePrompts() {
     const items = Array.from(list.querySelectorAll(SELECTORS.promptItem));
     return items.map(li => ({
         identifier: li.getAttribute('data-pm-identifier') || li.dataset.pmIdentifier || '',
-        name: extractName(li),
+        name: cachedOaiModule?.promptManager?.getPromptById?.(li.getAttribute('data-pm-identifier'))?.name ?? extractName(li),
         enabled: isEnabled(li),
         editable: !!findEditEl(li),
     })).filter(p => p.identifier);
@@ -161,11 +161,19 @@ export function toggleManyWithRetry(changes) {
     }).catch(error => {
         toastError(error.message || 'Could not apply prompt changes.');
         return false;
-    }).finally(() => {
-        queuedToggles--;
+    }).finally(async () => {
         // Render before unlocking, so there is no stale visual frame after loading disappears.
-        try { renderTree(); }
-        finally { if (!queuedToggles) setNativeToggleBusy(false); }
+        try {
+            renderTree();
+            // Let the browser paint the updated controls before dismissing the overlay.
+            // Frames, not a fixed delay; hidden tabs do not wait on throttled animation frames.
+            if (typeof requestAnimationFrame === 'function' && document.visibilityState === 'visible') {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }
+        } finally {
+            queuedToggles--;
+            if (!queuedToggles) setNativeToggleBusy(false);
+        }
     });
     toggleQueue = operation;
     return operation;

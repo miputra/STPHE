@@ -66,9 +66,8 @@ export function watchNativeSaveButton() {
     document.addEventListener('click', ev => {
         if (!ev.target.closest?.(SELECTORS.popupSaveBtn)) return;
         clearTimeout(watchNativeSaveButton._t);
-        // A little longer than the popup-close refresh: give ST's own save handler (which runs
-        // after this same click) time to actually persist the change before we re-read it.
-        watchNativeSaveButton._t = setTimeout(renderTree, 300);
+        // Read after the native click handler updates its model, without a fixed UI delay.
+        watchNativeSaveButton._t = setTimeout(renderTree, 0);
     }, true);
 }
 
@@ -208,26 +207,22 @@ export function watchNativeToggleStateSync() {
 export function watchPromptManager() {
     const attach = () => {
         const list = findPromptListEl();
-        if (!list) return false;
+        if (!list || list === observedListEl) return false;
         if (observer) observer.disconnect();
         observedListEl = list;
         observer = new MutationObserver(() => {
-            scheduleRenderTree(120);
+            scheduleRenderTree(0);
         });
-        // Filtered to 'class' only (not every attribute, not characterData): SillyTavern's own
-        // list re-renders trigger class changes we already want to catch, and renderTree() here
-        // also mutates the native list itself (reorderNativeList), so watching too broadly makes
-        // this observer see its own side effects and re-fire — filtering keeps that feedback
-        // loop from turning into a runaway render storm. A renamed prompt's text is caught
-        // instead by the popup-close refresh below (watchNativePopups) and the periodic poll.
-        observer.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        // Observe text edits as well as native row replacements. Keep the body observer
+        // alive so replacing the list is detected immediately, rather than by the 4s poll.
+        observer.observe(list, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
         return true;
     };
 
     attach();
 
     const bodyObserver = new MutationObserver(() => {
-        if (attach()) bodyObserver.disconnect();
+        if (attach()) scheduleRenderTree(0);
     });
     bodyObserver.observe(document.body, { childList: true, subtree: true });
 

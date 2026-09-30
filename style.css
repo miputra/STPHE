@@ -20,7 +20,7 @@
 
 /* Toggle-operation lock. The overlay covers the entire extension (including header and resize
    controls), while `inert` is also applied in native.js so keyboard focus cannot change values
-   behind it. It stays visible through native verification and the final delayed order repair. */
+   behind it. It stays visible through native verification and the updated tree paint. */
 .pf-dock.pf-processing > :not(.pf-processing-overlay) {
     pointer-events: none;
     user-select: none;
@@ -39,7 +39,7 @@
     text-align: center;
     cursor: wait;
     background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.9));
-    backdrop-filter: blur(3px);
+
     font-weight: 600;
 }
 
@@ -551,3 +551,5 @@ body.pf-native-popup-open .pf-restore-btn {
 .pf-group-name-form { display: flex; gap: 6px; margin: 8px 0; }
 .pf-group-name-form input { min-width: 0; flex: 1; }
 .pf-filter-group-unfiled { margin-top: 8px; }
+
+.pf-group-add { width: auto; white-space: nowrap; }
