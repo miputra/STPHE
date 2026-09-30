@@ -188,8 +188,7 @@ export function openNativeEditor(identifier) {
     const editBtn = findEditEl(li);
     if (!editBtn) return false;
     closeOwnOverlays();
-    const panel = document.querySelector(SELECTORS.responsePanel);
-    if (panel?.classList.contains('closedDrawer')) document.querySelector(SELECTORS.responsePanelToggle)?.click();
+    // Native editing opens its own popup, even while the configuration drawer is closed.
     editBtn.click();
     return true;
 }

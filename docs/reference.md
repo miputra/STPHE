@@ -2,16 +2,22 @@
 
 A prompt hierarchy, saved filter preset groups, and Auto Filter for SillyTavern. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
-**[Read the documentation](https://miputra.github.io/STPHE/)** · [Getting started](getting-started.html) · [GitHub Pages publishing](publishing.html)
+**[Read the documentation](https://miputra.github.io/STPHE/)** · [Getting started](getting-started.html)
 
 Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
+
+**AI development disclaimer**
+
+This was originally intended as a personal project, but I decided to make it public. I don't understand this project's code, and JavaScript is not a language I know; I only know C# and Python.
+
+I have added comments throughout the code to make development easier, whether for manual fixes or as notes for AI tools working on the project. I hope this helps.
 
 ## Documentation website
 
 ![Controls related to Documentation website](assets/docs-files.svg)
 
 
-The `docs/` directory contains the complete static documentation website: navigation, search, light/dark themes, screenshots, and feature guides. `.github/workflows/pages.yml` publishes it with GitHub Pages once the repository has Pages configured to use GitHub Actions. No build dependencies are required. Existing installation directories can retain the old `prompt-folders` name.
+The `docs/` directory contains the complete static documentation website: navigation, search, light/dark themes, screenshots, and feature guides. No build dependencies are required. Existing installation directories can retain the old `prompt-folders` name.
 
 ---
 
