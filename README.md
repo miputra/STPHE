@@ -1,6 +1,6 @@
 # Silly-Tavern-Prompt-Hierarchy-Expanded (STPHE)
 
-Organize SillyTavern’s Chat Completion prompts into folders and nested subfolders, with an independent toggle at every level.
+Organize SillyTavern’s Chat Completion prompts into folders and nested subfolders, with an independent toggle at every level. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
 ## Your prompt hierarchy, at a glance
 
@@ -79,10 +79,6 @@ In SillyTavern, open **Extensions → Install extension** and enter `https://git
 ![Diagram of native apply, verification and hierarchy paint](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/loading-flow.svg)
 
 Folder changes apply to the native prompt list, verify their states, then repaint the hierarchy before unlocking. The integration was checked with **SillyTavern 1.18.0**. Large presets can take time. Reordering and native UI integration are best-effort across versions; verify important prompt sequencing in AI Response Configuration after reloading. [Troubleshooting →](https://miputra.github.io/STPHE-Documentation/troubleshooting.html)
-
-![Documentation source map](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/docs-files.svg)
-
-The static documentation lives in `docs/`; it needs no build dependencies. See the [detailed reference](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md) for implementation caveats and earlier release notes.
 
 Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
 
