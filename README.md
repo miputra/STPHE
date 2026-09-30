@@ -2,7 +2,7 @@
 
 A prompt hierarchy, saved filter preset groups, and Auto Filter for SillyTavern. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
-**[Read the documentation](docs/index.html)** · [Getting started](docs/getting-started.html) · [GitHub Pages publishing](docs/publishing.html)
+**[Read the documentation](https://miputra.github.io/STPHE/)** · [Getting started](docs/getting-started.html) · [GitHub Pages publishing](docs/publishing.html)
 
 Made with Claude 4.6 Sonnet, ChatGPT 5.6 Sol, and ChatGPT 6 ASTRA.
 
