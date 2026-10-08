@@ -1,3 +1,4 @@
+import { addPresetTransferControls, presetExportButton } from './preset-import-export.js';
 import { el, save, settings, toastWarn } from './state.js';
 
 const within = (path, parent) => path === parent || path.startsWith(parent + '/');
@@ -22,6 +23,7 @@ export function isFilterGroupDisabled(key, item) {
 /** Independent folder trees for saved filters and auto rules. Group muting preserves each
  * member's own enabled/locked state; execution order remains the saved rule order. */
 export function buildFilterGroups(container, key, items, refresh, onChange = () => {}) {
+    addPresetTransferControls(container, key, refresh);
     const state = groupState(key);
     const commit = () => { save(); refresh(); onChange(); };
     const button = (label, title, action) => {
@@ -133,6 +135,7 @@ export function buildFilterGroups(container, key, items, refresh, onChange = () 
     targets.set('', unfiledRows);
     return {
         add(row, item) {
+            row.append(presetExportButton(key, item));
             row.setAttribute('draggable', 'true');
             row.addEventListener('dragstart', event => {
                 event.stopPropagation();

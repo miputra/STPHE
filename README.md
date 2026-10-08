@@ -2,6 +2,14 @@
 
 Organize SillyTavern’s Chat Completion prompts into folders and nested subfolders, with an independent toggle at every level. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
+## 3.4.0 — Tags and compatible imports
+
+Released 2026-10-09. Prompt tags, individual filter/rule exports, and the three import modes are now available. Full, folder, and single-prompt STPHE backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
+
+New STPHE prompt exports also work with SillyTavern's native Prompt Manager importer. **Use STPHE's importer to restore tags, folders, and filter settings**; native SillyTavern reads only the prompt definitions and order. Append preserves existing tags; Replace matching applies imported tags. Older backups without tags keep existing tags. Individual filter exports include their tag-matching criteria, not the tagged prompts themselves.
+
+See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#340--tags-and-compatible-imports).
+
 ## Your prompt hierarchy, at a glance
 
 ![Focused prompt hierarchy with nested folders and independent toggles](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/hierarchy.png)
@@ -58,7 +66,21 @@ The master switch pauses filters. The two timing options independently re-evalua
 
 ![Focused Import and Export menu](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/import-export.png)
 
-Use **Export folder structure** for a backup. **Import** replaces the folder organization; **Import append** merges into the existing structure. Full exports include filters, rules and their groups, with native definitions and order when available.
+Use **Export prompt list and folders** for a backup. Full exports include tags, filters, rules and their groups, with native prompt definitions and order when available.
+
+Prompt lists, Filter presets, Chat filter presets, and Auto Filter rules share three import modes:
+
+| Mode | Behavior |
+| --- | --- |
+| **Append** | Add new items and keep existing matches unchanged. |
+| **Replace matching** | Update matching items, add new items, and keep everything else. |
+| **Clear and import** | Replace the selected list with the file's contents. |
+
+Matching uses the ID first, then a unique name, ignoring case and surrounding spaces. Replacing a match preserves its local ID so existing references continue to work. Ambiguous names or invalid files stop the import before changes are applied. You see a confirmation with the affected scope before importing.
+
+Each preset or Auto Filter row has an **Export** button. Each of the three filter collections has its own **Import…**, mode selector, and **Export all…** controls. Importing one preset uses that collection's Import control. These files include the selected rules and their groups, but do not bundle prompt definitions; manually selected prompt IDs and folder paths must exist at the destination.
+
+**Clear and import** for a prompt list clears the active list and its folder organization, then imports the file. Reusable prompt definitions remain available and other lists are retained. Included filter collections use the selected mode; collections absent from the file stay unchanged. Clearing a filter collection affects only that collection and its groups. The separate **Append after this entry** action retains its existing placement workflow.
 
 ![Prompt menu with rename, insertion, export and deletion actions](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/prompt-menu.png)
 
@@ -95,3 +117,14 @@ If you like the project, you can also buy me a coffee.
 - **Trakteer:** [Support miputra](https://trakteer.id/miputra?quantity=1)
 - **BEP-20:** `0xE122d7d44604d59b27Ca3FAA44Fc1Da94CE0aE03`
 - **Solana:** `C8A5J9w7UkXeLVeCWhpP47SPCPvnuS55RJWybzFhB3jF`
+
+
+### Prompt tags
+
+New and existing prompts have a **Prompt tags** field in the native prompt editor. Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and the native **Save** button to save your changes. Closing without saving discards tag edits. Empty tags and duplicate names (ignoring case) are skipped.
+
+In **Filter**, select **Prompt tag** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
+
+In **Auto Filter**, select **Prompt tag** in the effect's **Match by** menu. The chat condition controls when matching prompts (or their containing folders) are enabled or disabled. Auto Filter exclusions still apply. For an always-on rule, use chat depth 0.
+
+Tags are extension metadata associated with a prompt's identifier; they do not change the prompt text sent to the model. The same identifier shares tags across presets. Extension full, folder, and single-prompt backups include tags; native SillyTavern exports alone do not include this metadata.

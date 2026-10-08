@@ -408,6 +408,29 @@ body.pf-native-popup-open .pf-restore-btn {
 .pf-view-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pf-view-hint { font-size: 0.78em; opacity: 0.6; }
 
+.pf-prompt-view-modal {
+    width: min(1100px, 94vw);
+    height: 90vh;
+    height: 90dvh;
+    max-width: 100%;
+    max-height: calc(100dvh - 40px);
+    min-width: min(360px, 100%);
+    min-height: min(360px, 80dvh);
+    resize: both;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.pf-prompt-view-modal .pf-view-content { min-height: 0; min-width: 0; width: 100%; }
+.pf-prompt-view-modal .pf-view-header,
+.pf-prompt-view-modal .pf-view-stats,
+.pf-prompt-view-modal .pf-view-footer { flex-shrink: 0; }
+.pf-prompt-view-modal .pf-view-id { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-prompt-view-modal .pf-view-footer { flex-wrap: wrap; }
+.pf-prompt-view-modal #pf-view-edit-btn { width: auto; max-width: none; white-space: nowrap; flex-shrink: 0; }
+.pf-view-tags { flex: 0 1 auto; max-height: 20%; overflow-y: auto; }
+.pf-view-tags-label { display: block; font-size: .85em; margin-bottom: 5px; opacity: .8; }
+
 .pf-full-modal {
     width: min(760px, 94vw);
     max-height: 88vh;
@@ -553,3 +576,13 @@ body.pf-native-popup-open .pf-restore-btn {
 .pf-filter-group-unfiled { margin-top: 8px; }
 
 .pf-group-add { width: auto; white-space: nowrap; }
+
+.pf-tag-editor { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.pf-tag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-tag-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--SmartThemeBorderColor); border-radius: 12px; padding: 2px 8px; max-width: 100%; overflow-wrap: anywhere; }
+.pf-tag-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1.2em; }
+.pf-tag-editor small { opacity: .75; }
+
+.pf-preset-transfer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
+.pf-preset-transfer select { width: auto; flex: 1 1 150px; }
+.pf-preset-transfer small { flex-basis: 100%; opacity: .8; }

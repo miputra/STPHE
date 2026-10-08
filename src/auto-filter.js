@@ -34,7 +34,8 @@ export const AUTO_MATCH_TYPES = [
 ];
 
 /** Looks up an AUTO_MATCH_TYPES entry by its key. */
-export function autoMatchDef(key) { return AUTO_MATCH_TYPES.find(t => t.key === key); }
+const AUTO_EFFECT_TYPES = [...AUTO_MATCH_TYPES, { key: 'tag', label: 'Prompt tag', kind: 'tag' }];
+export function autoMatchDef(key) { return AUTO_EFFECT_TYPES.find(t => t.key === key); }
 
 // The old system had six fixed match types (All/Specific × Character/Location/Time), each keyed
 // to a hardcoded tag whose VALUE lived in its inner text (`<char_slc>Alice</char_slc>`). The new
@@ -219,7 +220,9 @@ async function computeAutoEffectTargets(effect) {
     }
     // regex / word — computeMatches(..., 'auto') applies Auto Filter's own (independent)
     // exclusion set, never the manual filter's excludedPrompts/excludedFolders.
-    const params = def.kind === 'regex'
+    const params = def.kind === 'tag'
+        ? { type: 'tag', text: effect.text || '' }
+        : def.kind === 'regex'
         ? { type: 'regex', text: effect.text || '' }
         : { type: 'word', text: effect.text || '', caseSensitive: !!effect.caseSensitive };
     const result = await computeMatches(null, params, undefined, 'auto');
@@ -420,7 +423,7 @@ function describeAutoFilterEffect(effect) {
     const label = def ? def.label : effect.matchType;
     let valueBit = '';
     if (def?.kind === 'xml') valueBit = `: ${describeXmlSpec(effect.xmlTag, effect.xmlParams)}`;
-    else if (def?.kind === 'regex' || def?.kind === 'word') valueBit = effect.text ? `: ${effect.text}` : '';
+    else if (def?.kind === 'tag' || def?.kind === 'regex' || def?.kind === 'word') valueBit = effect.text ? `: ${effect.text}` : '';
     const caseBit = (def?.kind === 'word' && effect.caseSensitive) ? ' (Aa)' : '';
     const targetLabel = effect.target === 'folder-all' ? 'all containing folders' : effect.target === 'folder-last' ? 'last containing folder' : 'the prompt';
     return `${label}${valueBit}${caseBit} → ${targetLabel}`;
@@ -559,7 +562,7 @@ export function openAutoFilterModal() {
                         <div class="pf-bm-row">
                             <label for="pf-af-eff-type">Match by</label>
                             <select id="pf-af-eff-type" class="text_pole">
-                                ${AUTO_MATCH_TYPES.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('')}
+                                ${AUTO_EFFECT_TYPES.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('')}
                             </select>
                         </div>
                         <div id="pf-af-eff-xml-block" style="display:none"></div>
@@ -691,9 +694,10 @@ export function openAutoFilterModal() {
     function updateEffMatchTypeVisibility() {
         const def = autoMatchDef(effType.value);
         effXmlBlock.style.display = def?.kind === 'xml' ? '' : 'none';
-        effTextRow.style.display = (def?.kind === 'regex' || def?.kind === 'word') ? 'flex' : 'none';
+        effTextRow.style.display = (def?.kind === 'tag' || def?.kind === 'regex' || def?.kind === 'word') ? 'flex' : 'none';
         effCaseRow.style.display = def?.kind === 'word' ? 'flex' : 'none';
         if (def?.kind === 'regex') { effTextLabel.textContent = 'Regex'; effTextInput.placeholder = 'e.g. \\btavern\\b'; }
+        if (def?.kind === 'tag') { effTextLabel.textContent = 'Prompt tag'; effTextInput.placeholder = 'Exact tag name (ignores case)'; }
         if (def?.kind === 'word') { effTextLabel.textContent = 'Word'; effTextInput.placeholder = 'e.g. tavern'; }
     }
     function renderManualChecklists() {
@@ -794,7 +798,7 @@ export function openAutoFilterModal() {
             const effDef = autoMatchDef(effType.value);
             if (effDef?.kind === 'xml') {
                 await effXmlPicker.setTagAndParams(filter.effect?.xmlTag, filter.effect?.xmlParams);
-            } else if (effDef?.kind === 'regex' || effDef?.kind === 'word') {
+            } else if (effDef?.kind === 'tag' || effDef?.kind === 'regex' || effDef?.kind === 'word') {
                 effTextInput.value = filter.effect?.text || '';
             }
             effCaseCb.checked = effDef?.kind === 'word' && !!filter.effect?.caseSensitive;
@@ -887,7 +891,7 @@ export function openAutoFilterModal() {
                 effXmlTag = effXmlPicker.getTag();
                 effXmlParams = effXmlPicker.getParams();
                 if (!effXmlTag) { hint.textContent = 'Enter an effect XML tag.'; return; }
-            } else if (effDef?.kind === 'regex' || effDef?.kind === 'word') {
+            } else if (effDef?.kind === 'tag' || effDef?.kind === 'regex' || effDef?.kind === 'word') {
                 text = effTextInput.value.trim();
                 if (!text) { hint.textContent = `Enter an effect ${effDef.kind} to search for.`; return; }
                 if (effDef.kind === 'regex') { try { new RegExp(text); } catch { hint.textContent = 'That effect regex is not valid.'; return; } }

@@ -205,6 +205,12 @@ export async function computeMatches(scopePath, params, onProgress, mode = 'filt
     for (let i = 0; i < scope.length; i++) {
         const p = scope[i];
         onProgress?.(i + 1, scope.length);
+        if (params.type === 'tag') {
+            const query = (params.text || '').trim().toLowerCase();
+            const tags = settings().promptTags?.[p.identifier];
+            if (query && Array.isArray(tags) && tags.some(tag => typeof tag === 'string' && tag.trim().toLowerCase() === query)) matched.push(p);
+            continue;
+        }
         const peeked = await peekContent(p.identifier);
         const content = peeked?.content || '';
         let isMatch = false;
@@ -582,7 +588,7 @@ export function openBulkMatchModal(scopePath) {
         <div class="pf-view-modal pf-bm-modal">
             <div class="pf-view-header">
                 <span class="fa-solid fa-filter"></span>
-                <b>Filter (by content)</b>
+                <b>Filter (by content or prompt tag)</b>
                 <span class="pf-icon-btn fa-solid fa-xmark" id="pf-bm-close" title="Close"></span>
             </div>
             <div class="pf-bm-scope">${escapeHtml(scopeLabel)}</div>
@@ -590,7 +596,7 @@ export function openBulkMatchModal(scopePath) {
                 <div class="pf-bm-row">
                     <label for="pf-bm-source">Match against</label>
                     <select id="pf-bm-source" class="text_pole">
-                        <option value="form">Prompt content (this form)</option>
+                        <option value="form">Prompt content / tags (this form)</option>
                         <option value="chat">Chat (live, right now)</option>
                     </select>
                 </div>
@@ -600,6 +606,7 @@ export function openBulkMatchModal(scopePath) {
                     <label for="pf-bm-type">Match by</label>
                     <select id="pf-bm-type" class="text_pole">
                         <option value="xml">XML tag</option>
+                        <option value="tag">Prompt tag</option>
                         <option value="word">Word</option>
                         <option value="regex">Regex</option>
                         <option value="regexValues">Regex (list matched values)</option>
@@ -656,6 +663,7 @@ export function openBulkMatchModal(scopePath) {
                             <label for="pf-bm-sel-mode">Select by</label>
                             <select id="pf-bm-sel-mode" class="text_pole">
                                 <option value="xml">XML tag</option>
+                                <option value="tag">Prompt tag</option>
                                 <option value="word">Word</option>
                                 <option value="regex">Regex</option>
                                 <option value="regexValues">Regex (list matched values)</option>
@@ -831,8 +839,9 @@ export function openBulkMatchModal(scopePath) {
         hint.textContent = '';
         const type = typeSelect.value;
         xmlBlock.style.display = type === 'xml' ? '' : 'none';
-        textRow.style.display = (type === 'word' || type === 'regex' || type === 'regexValues') ? 'flex' : 'none';
+        textRow.style.display = (type === 'tag' || type === 'word' || type === 'regex' || type === 'regexValues') ? 'flex' : 'none';
         caseRow.style.display = type === 'word' ? 'flex' : 'none';
+        if (type === 'tag') { textLabel.textContent = 'Prompt tag'; textInput.placeholder = 'Exact tag name (ignores case)'; }
         if (type === 'word') { textLabel.textContent = 'Word'; textInput.placeholder = 'e.g. tavern'; }
         if (type === 'regex') { textLabel.textContent = 'Regex'; textInput.placeholder = 'e.g. \\btavern\\b'; }
         if (type === 'regexValues') { textLabel.textContent = 'Regex'; textInput.placeholder = 'e.g. <char name="(.*?)">'; }
@@ -894,11 +903,12 @@ export function openBulkMatchModal(scopePath) {
         const mode = selModeSelect.value;
         bulkMatchState.selMode = mode;
         selXmlBlock.style.display = mode === 'xml' ? '' : 'none';
-        selTextRow.style.display = (mode === 'word' || mode === 'regex' || mode === 'regexValues') ? 'flex' : 'none';
+        selTextRow.style.display = (mode === 'tag' || mode === 'word' || mode === 'regex' || mode === 'regexValues') ? 'flex' : 'none';
         selCaseRow.style.display = mode === 'word' ? 'flex' : 'none';
         selManualBlock.style.display = mode === 'manual' ? '' : 'none';
         selRegexValueRow.style.display = 'none';
         selRegexValueSelect.innerHTML = '';
+        if (mode === 'tag') { selTextLabel.textContent = 'Prompt tag'; selTextInput.placeholder = 'Exact tag name (ignores case)'; }
         if (mode === 'word') { selTextLabel.textContent = 'Word'; selTextInput.placeholder = 'e.g. tavern'; }
         if (mode === 'regex') { selTextLabel.textContent = 'Regex'; selTextInput.placeholder = 'e.g. \\btavern\\b'; }
         if (mode === 'regexValues') { selTextLabel.textContent = 'Regex'; selTextInput.placeholder = 'e.g. <char name="(.*?)">'; }
@@ -1267,8 +1277,8 @@ export function openBulkMatchModal(scopePath) {
         // there's no need to have clicked Apply, let alone gotten a result, before saving one.
         // Just the spec itself needs to be complete enough to run later.
         const type = typeSelect.value;
-        if ((type === 'word' || type === 'regex' || type === 'regexValues') && !(bulkMatchState.regexPattern || textInput.value).trim()) {
-            hint.textContent = `Enter a ${type === 'word' ? 'word' : 'regex'} to search for before saving a preset.`;
+        if ((type === 'tag' || type === 'word' || type === 'regex' || type === 'regexValues') && !(bulkMatchState.regexPattern || textInput.value).trim()) {
+            hint.textContent = `Enter a ${type === 'tag' ? 'prompt tag' : type === 'word' ? 'word' : 'regex'} to search for before saving a preset.`;
             return;
         }
         if (type === 'xml' && !xmlPicker.getTag()) {
@@ -1340,7 +1350,7 @@ export function openBulkMatchModal(scopePath) {
             return { spec: { mode: 'match', selMode: mode, xmlTag, xmlParams: selXmlPicker.getParams(), target } };
         }
         const text = selTextInput.value.trim();
-        if (!text) return { error: `Enter a ${mode === 'word' ? 'word' : 'regex'} for "Select prompts to affect" before saving.` };
+        if (!text) return { error: `Enter a ${mode === 'tag' ? 'prompt tag' : mode === 'word' ? 'word' : 'regex'} for "Select prompts to affect" before saving.` };
         if ((mode === 'regex' || mode === 'regexValues')) { try { new RegExp(text); } catch { return { error: 'That "Select prompts to affect" regex is not valid.' }; } }
         return { spec: { mode: 'match', selMode: mode, text, caseSensitive: mode === 'word' && !!selCaseCb.checked, regexValue: mode === 'regexValues' ? (selRegexValueSelect.value || '__ALL__') : undefined, target } };
     }

@@ -1,16 +1,16 @@
+import { importPromptList } from './prompt-list-import.js';
 import { closeOwnOverlays, directCreatePrompt, findPromptOrderEntry, forceNativeRerender, getOaiModule, peekContent } from './native.js';
 import { liveCache, renderTree } from './render.js';
 import { ROOT, el, escapeHtml, isDescendantOrSelf, joinPath, moveEntryInOrder, parentOf, save, settings, toastError, toastWarn } from './state.js';
 
-// ---------- Import / export (this extension's own folder structure only — not the prompts
-// themselves, except for a best-effort snapshot bundled in for round-tripping deleted prompts;
-// driven by the dock's Export/Import buttons, not SillyTavern's own prompt-manager export
-// footer). Lets you back up or transfer your folders/assignments/order between presets or
-// installs. ----------
+// ---------- Import / export of folder organization and prompt-list backups.
+// Global import modes are planned atomically in prompt-list-import.js; the row-scoped
+// append-after workflow retains its placement and conflict-resolution behavior. ----------
 
 /** Small `document.createElement('a')` + Blob download, shared by every "export ... as JSON"
  *  action in this file (whole structure, one folder, or one prompt). */
-function downloadJson(data, filename) {
+export function downloadJson(data, filename) {
+    data = withNativePromptEnvelope(data);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -20,6 +20,30 @@ function downloadJson(data, filename) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Keep historical STPHE fields at the top level and add the native v1 prompt envelope.
+ * Native Prompt Manager imports only data.prompts/data.prompt_order, not extension metadata. */
+export function withNativePromptEnvelope(data) {
+    if (!Array.isArray(data.prompts)) return data;
+    const nativeData = { prompts: data.prompts };
+    const order = data.prompt_order?.[0]?.order;
+    if (Array.isArray(order)) nativeData.prompt_order = order;
+    return { ...data, version: 1, type: 'character', data: nativeData };
+}
+
+/** Normalize native Prompt Manager exports without changing historical flat STPHE backups. */
+export function normalizePromptImport(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+    if (Array.isArray(input.prompts) || Array.isArray(input.folders) || input.assignments) return input;
+    if (!['full', 'character'].includes(input.type) || !input.data || typeof input.data !== 'object') return input;
+    if (input.version !== 1) throw new Error('Unsupported native prompt export version. Expected version 1.');
+    const out = { ...input, ...input.data };
+    const order = input.data.prompt_order;
+    // Native full exports in character mode contain no active order (an empty array).
+    if (order == null || (Array.isArray(order) && order.length === 0 && input.type === 'full')) delete out.prompt_order;
+    else if (Array.isArray(order)) out.prompt_order = [{ order }];
+    return out;
 }
 
 /** Filesystem-safe-ish filename fragment: lowercased, non-alphanumerics collapsed to single
@@ -64,6 +88,7 @@ export async function exportFolderStructure() {
         collapsed: s.collapsed,
         folderDisabled: s.folderDisabled,
         folderSnapshot: s.folderSnapshot,
+        promptTags: s.promptTags,
         promptDesired: s.promptDesired,
         excludedPrompts: s.excludedPrompts,
         excludedFolders: s.excludedFolders,
@@ -117,6 +142,7 @@ export async function exportFolder(path) {
         collapsed: {},
         folderDisabled: {},
         folderSnapshot: {},
+        promptTags: {},
         promptDesired: {},
         excludedPrompts: {},
         excludedFolders: {},
@@ -132,6 +158,7 @@ export async function exportFolder(path) {
     for (const [k, v] of Object.entries(s.excludedAutoFolders)) if (folderSet.has(k)) data.excludedAutoFolders[k] = v;
     for (const [id, v] of Object.entries(s.excludedPrompts)) if (isDescendantOrSelf(s.assignments[id] || ROOT, path)) data.excludedPrompts[id] = v;
     for (const [id, v] of Object.entries(s.excludedAutoPrompts)) if (isDescendantOrSelf(s.assignments[id] || ROOT, path)) data.excludedAutoPrompts[id] = v;
+    for (const [id, v] of Object.entries(s.promptTags || {})) if (isDescendantOrSelf(s.assignments[id] || ROOT, path)) data.promptTags[id] = v;
     for (const [id, v] of Object.entries(s.promptDesired)) if (isDescendantOrSelf(s.assignments[id] || ROOT, path)) data.promptDesired[id] = v;
     for (const [parentPath, arr] of Object.entries(s.order)) if (folderSet.has(parentPath)) data.order[parentPath] = arr;
 
@@ -180,6 +207,7 @@ export async function exportPrompt(identifier, fallbackName) {
         data.prompts = [{ identifier, name, content: peeked.content ?? '' }];
     }
 
+    data.promptTags = { [identifier]: s.promptTags?.[identifier] || [] };
     const path = s.assignments[identifier];
     if (Object.prototype.hasOwnProperty.call(s.promptDesired, identifier)) {
         data.promptDesired = { [identifier]: !!s.promptDesired[identifier] };
@@ -263,16 +291,22 @@ function removeIdentifierEverywhere(oai, identifier) {
  *   - 'keep-both': adds the imported one as a new, separate prompt (a freshly generated
  *     identifier if its own would collide), named via nameWithSuffix() to avoid an ambiguous
  *     duplicate name. The existing prompt is untouched. */
-function applyConflictResolution(oai, orderEntry, conflict, resolution, importedAssignments) {
+function applyConflictResolution(oai, orderEntry, conflict, resolution, importedAssignments, importedTags) {
     const s = settings();
     const existingId = conflict.existing.identifier;
     const importedId = conflict.imported.identifier;
     const importedFolder = importedAssignments ? importedAssignments[importedId] : undefined;
 
+    const copyTags = id => {
+        s.promptTags ??= {};
+        if (Array.isArray(importedTags?.[importedId])) s.promptTags[id] = [...importedTags[importedId]];
+    };
     if (resolution === 'keep-previous') return;
 
     if (resolution === 'delete-previous') {
         removeIdentifierEverywhere(oai, existingId);
+        delete s.promptTags?.[existingId];
+        copyTags(importedId);
         delete s.assignments[existingId];
         delete s.excludedPrompts[existingId];
         delete s.excludedAutoPrompts[existingId];
@@ -283,6 +317,7 @@ function applyConflictResolution(oai, orderEntry, conflict, resolution, imported
     }
 
     if (resolution === 'replace-keep-folder' || resolution === 'replace-new-folder') {
+        copyTags(existingId);
         const idx = oai.prompts.findIndex(p => p && p.identifier === existingId);
         if (idx !== -1) oai.prompts[idx] = { ...conflict.imported, identifier: existingId };
         if (resolution === 'replace-new-folder' && importedFolder !== undefined) {
@@ -299,6 +334,7 @@ function applyConflictResolution(oai, orderEntry, conflict, resolution, imported
         const newId = idCollides
             ? ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `pf-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
             : importedId;
+        copyTags(newId);
         oai.prompts.push({ ...conflict.imported, identifier: newId, name: newName });
         if (orderEntry) orderEntry.order.push({ identifier: newId, enabled: true });
         if (importedFolder) { ensureFolderChainExists(importedFolder); s.assignments[newId] = importedFolder; }
@@ -330,7 +366,7 @@ function wordCountLocal(text) {
  *  how many other genuinely-new prompts from the file will be added as usual. A single Apply
  *  button runs every chosen resolution (applyConflictResolution) and the plain missing-defs/
  *  missing-order additions together, then saves and re-renders once. */
-function openImportConflictsModal({ conflicts, missingDefs, missingOrder, importedAssignments, oai, orderEntry }) {
+function openImportConflictsModal({ conflicts, missingDefs, missingOrder, importedAssignments, importedTags, oai, orderEntry }) {
     closeOwnOverlays();
 
     const overlay = el('div', 'pf-view-overlay');
@@ -373,7 +409,7 @@ function openImportConflictsModal({ conflicts, missingDefs, missingOrder, import
         selects.forEach(sel => {
             const idx = Number(sel.dataset.idx);
             const resolution = sel.value;
-            applyConflictResolution(oai, orderEntry, conflicts[idx], resolution, importedAssignments);
+            applyConflictResolution(oai, orderEntry, conflicts[idx], resolution, importedAssignments, importedTags);
             if (resolution === 'keep-previous') counts.kept++;
             else if (resolution === 'delete-previous') counts.deleted++;
             else if (resolution === 'keep-both') counts.keptBoth++;
@@ -428,7 +464,7 @@ export async function restorePromptsFromImport(data) {
     ).filter(io => !conflictIds.has(io?.identifier));
 
     if (conflicts.length > 0) {
-        openImportConflictsModal({ conflicts, missingDefs, missingOrder, importedAssignments: data.assignments, oai, orderEntry });
+        openImportConflictsModal({ conflicts, missingDefs, missingOrder, importedAssignments: data.assignments, importedTags: data.promptTags, oai, orderEntry });
         return;
     }
 
@@ -460,7 +496,7 @@ export async function restorePromptsFromImport(data) {
  *  already have — see the note on fillMissing below), and manual sibling order arrays are merged
  *  per-folder, appending any imported entry not already present rather than replacing the array
  *  outright. Nothing already in your settings is removed, touched, or reassigned. */
-function mergeFolderStructure(s, data) {
+export function mergeFolderStructure(s, data) {
     for (const key of ['matchPresets', 'chatMatchPresets', 'autoFilters']) {
         if (!Array.isArray(data[key])) continue;
         const ids = new Set(s[key].map(item => item.id));
@@ -503,6 +539,8 @@ function mergeFolderStructure(s, data) {
     fillMissing(s.collapsed, data.collapsed);
     fillMissing(s.folderDisabled, data.folderDisabled);
     fillMissing(s.folderSnapshot, data.folderSnapshot);
+    s.promptTags ??= {};
+    fillMissing(s.promptTags, data.promptTags);
     fillMissing(s.promptDesired, data.promptDesired);
     fillMissing(s.excludedPrompts, data.excludedPrompts);
     fillMissing(s.excludedFolders, data.excludedFolders);
@@ -522,10 +560,32 @@ function mergeFolderStructure(s, data) {
     }
 }
 
+/** Parse first, then let the caller validate and confirm before changing anything. */
+export function readJsonFile(onData) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.hidden = true;
+    document.body.appendChild(input);
+    input.addEventListener('cancel', () => input.remove(), { once: true });
+    input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        input.remove();
+        if (!file) return;
+        try {
+            const data = JSON.parse(await file.text());
+            await onData(data);
+        } catch (error) {
+            toastError(`Could not import: ${error.message}`);
+        }
+    }, { once: true });
+    input.click();
+}
+
 /** Opens a native file picker for a `.json` export, reads and validates it, and hands the parsed
  *  data + whether it looks like it has folder-structure and/or prompt data to `onFolderData` /
- *  restorePromptsFromImport(). Shared by both importFolderStructure() (replace) and
- *  importFolderStructureMerge() (merge) below — they differ only in how they apply folder data. */
+ *  restorePromptsFromImport(). Used only by the row-scoped Append after workflow; global
+ *  imports use readJsonFile() and the selected prompt-list mode. */
 function pickAndReadImportFile(onFolderData) {
     const input = document.createElement('input');
     input.type = 'file';
@@ -541,13 +601,13 @@ function pickAndReadImportFile(onFolderData) {
         reader.onload = () => {
             let data;
             try {
-                data = JSON.parse(String(reader.result));
+                data = normalizePromptImport(JSON.parse(String(reader.result)));
             } catch {
                 toastError('Could not import: that file isn\'t valid JSON.');
                 return;
             }
             const hasFolderData = data && typeof data === 'object'
-                && (Array.isArray(data.folders) || (data.assignments && typeof data.assignments === 'object'));
+                && (Array.isArray(data.folders) || (data.assignments && typeof data.assignments === 'object') || data.promptTags);
             const hasPromptData = data && typeof data === 'object'
                 && (Array.isArray(data.prompts) || Array.isArray(data.prompt_order));
             if (!hasFolderData && !hasPromptData) {
@@ -555,7 +615,7 @@ function pickAndReadImportFile(onFolderData) {
                 return;
             }
 
-            if (hasFolderData) onFolderData(data);
+            if (hasFolderData && onFolderData(data) === false) return;
             if (hasPromptData) restorePromptsFromImport(data);
         };
         reader.readAsText(file);
@@ -563,69 +623,10 @@ function pickAndReadImportFile(onFolderData) {
     input.click();
 }
 
-/** Opens a native file picker for a `.json` export, then — after confirming with the user —
- *  replaces this extension's folder structure with whatever's in the file (folders, assignments,
- *  order, collapsed state, exclusions) and/or hands any bundled prompt data off to
- *  restorePromptsFromImport(). Accepts both this extension's own exports and, for the prompt-data
- *  half, a genuine native SillyTavern prompt-list export (same `prompts`/`prompt_order` fields).
- *  See importFolderStructureMerge() for the additive counterpart that keeps your existing folders
- *  instead of discarding them. */
-export function importFolderStructure() {
-    pickAndReadImportFile(data => {
-        const proceed = confirm(
-            'Import the folder structure from this file? This REPLACES your current folders, prompt ' +
-            'assignments, order, and collapsed state in this extension. It does not touch your actual ' +
-            'prompts on its own — only how they\'re organized here.'
-        );
-        if (!proceed) return;
-        const s = settings();
-        if (Array.isArray(data.folders)) s.folders = data.folders;
-        if (data.assignments && typeof data.assignments === 'object') s.assignments = data.assignments;
-        if (data.order && typeof data.order === 'object') s.order = data.order;
-        if (data.collapsed && typeof data.collapsed === 'object') s.collapsed = data.collapsed;
-        if (data.folderDisabled && typeof data.folderDisabled === 'object') s.folderDisabled = data.folderDisabled;
-        if (data.folderSnapshot && typeof data.folderSnapshot === 'object') s.folderSnapshot = data.folderSnapshot;
-        if (data.promptDesired && typeof data.promptDesired === 'object') s.promptDesired = data.promptDesired;
-        if (data.excludedPrompts && typeof data.excludedPrompts === 'object') s.excludedPrompts = data.excludedPrompts;
-        if (data.excludedFolders && typeof data.excludedFolders === 'object') s.excludedFolders = data.excludedFolders;
-        if (data.excludedAutoPrompts && typeof data.excludedAutoPrompts === 'object') s.excludedAutoPrompts = data.excludedAutoPrompts;
-        if (data.excludedAutoFolders && typeof data.excludedAutoFolders === 'object') s.excludedAutoFolders = data.excludedAutoFolders;
-        for (const key of ['matchPresets', 'chatMatchPresets', 'autoFilters']) {
-            if (Array.isArray(data[key])) s[key] = data[key];
-        }
-        if (data.filterGroups && typeof data.filterGroups === 'object') s.filterGroups = data.filterGroups;
-        for (const key of ['autoFilterDisabled', 'autoFilterOnSendClick', 'autoFilterOnGenerationDone']) {
-            if (typeof data[key] === 'boolean') s[key] = data[key];
-        }
-        save();
-        renderTree();
-        window.toastr?.success?.('Folder structure imported (replaced).');
-    });
-}
-
-/** The additive counterpart to importFolderStructure(): instead of discarding your current
- *  folders/assignments/order, merges the imported file into them via mergeFolderStructure() — new
- *  folders are added, imported assignments/exclusions win on a conflict, and nothing you already
- *  had is removed. Prompt-data restoration (restorePromptsFromImport) works exactly the same as
- *  the replace flow either way, since it's already additive-only by nature. This is the "global"
- *  merge — it always lands at the top of your structure; importFolderStructureAppendAfter() below
- *  is the row-scoped version that lands alongside a chosen folder/prompt instead. */
-export function importFolderStructureMerge() {
-    pickAndReadImportFile(data => {
-        const proceed = confirm(
-            'Import append the folder structure from this file? This ADDS to your current folders, prompt ' +
-            'assignments, order, and collapsed state in this extension — for the whole tree, not just one ' +
-            'folder. Nothing already here is ever touched, removed, or overwritten — an imported folder/prompt ' +
-            'only fills in where you don\'t already have one organized. It does not touch your actual prompts ' +
-            'on its own — only how they\'re organized here.'
-        );
-        if (!proceed) return;
-        mergeFolderStructure(settings(), data);
-        save();
-        renderTree();
-        window.toastr?.success?.('Folder structure imported (append).');
-    });
-}
+/** Prompt-list import modes, also used by existing extension entry points. */
+export function importFolderStructure() { importPromptList('clear'); }
+export function importFolderStructureMerge() { importPromptList('append'); }
+export function importFolderStructureReplaceMatching() { importPromptList('replace'); }
 
 /** Rewrites every folder path in a freshly-parsed import `data` object so that whatever was
  *  top-level ("Unfiled") in the file becomes nested under `parentPath` instead — used by
@@ -688,7 +689,7 @@ export function importFolderStructureAppendAfter(anchorEntry, parentPath, anchor
             `top-level folders/prompts are filed alongside "${anchorLabel}" and positioned right after it. It ` +
             'does not touch your actual prompts on its own — only how they\'re organized here.'
         );
-        if (!proceed) return;
+        if (!proceed) return false;
 
         // Figure out which folders/prompts were top-level ("Unfiled") in the FILE, before any
         // remapping — those are exactly the items that should end up positioned after the anchor;

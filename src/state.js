@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
     version: 7,
     filterGroups: {},
     folders: [],        // explicit list of folder paths, e.g. ["Jailbreak", "Jailbreak/NSFW"]
+    promptTags: {},      // { promptIdentifier: [tag, ...] } — extension metadata, never prompt content
     assignments: {},     // { promptIdentifier: "Folder/Sub" }
     order: {},            // { parentPath: [{type:'folder'|'prompt', key}, ...] } manual sibling order
     collapsed: {},          // { "Folder/Sub": true }
@@ -91,6 +92,7 @@ export function settings() {
     const s = extension_settings[MODULE];
     if (!Number.isFinite(s.version) || s.version < DEFAULT_SETTINGS.version) s.version = DEFAULT_SETTINGS.version;
     if (!Array.isArray(s.folders)) s.folders = [];
+    if (!s.promptTags || typeof s.promptTags !== 'object' || Array.isArray(s.promptTags)) s.promptTags = {};
     if (typeof s.assignments !== 'object' || !s.assignments) s.assignments = {};
     if (typeof s.order !== 'object' || !s.order) s.order = {};
     if (typeof s.collapsed !== 'object' || !s.collapsed) s.collapsed = {};

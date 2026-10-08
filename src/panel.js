@@ -3,7 +3,7 @@ import { watchPromptManager } from './bootstrap.js';
 import { openBulkMatchModal } from './bulk-match.js';
 import { showContextMenu } from './context-menu.js';
 import { createFolder } from './folders.js';
-import { exportFolderStructure, importFolderStructure, importFolderStructureMerge } from './import-export.js';
+import { exportFolderStructure, importFolderStructure, importFolderStructureMerge, importFolderStructureReplaceMatching } from './import-export.js';
 import { requestNewPromptAfter, showFullPreview } from './native.js';
 import { attachTreeBackgroundDeselect, openRemoveAllMenu, promptOrNull, renderTree, setSearchTerm } from './render.js';
 import { ROOT, el, save, settings } from './state.js';
@@ -45,13 +45,13 @@ function panelHtml() {
             <div class="menu_button menu_button_icon" id="pf-preview" title="Preview full compiled prompt + word/token count">
                 <i class="fa-solid fa-file-lines"></i><span>Preview</span>
             </div>
-            <div class="menu_button menu_button_icon pf-icon-only" id="pf-bulk-match" title="Filter: enable/disable prompts by content match (XML tag / word / regex)">
+            <div class="menu_button menu_button_icon pf-icon-only" id="pf-bulk-match" title="Filter: enable/disable prompts by prompt tag or content (XML tag / word / regex)">
                 <i class="fa-solid fa-filter"></i>
             </div>
             <div class="menu_button menu_button_icon pf-icon-only" id="pf-auto-filter" title="Auto Filter: enable/disable prompts automatically based on recent chat content">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
-            <div class="menu_button menu_button_icon pf-icon-only" id="pf-import-export" title="Import / Export a folder structure as JSON">
+            <div class="menu_button menu_button_icon pf-icon-only" id="pf-import-export" title="Import / Export prompt lists and folders as JSON">
                 <i class="fa-solid fa-file-import"></i>
             </div>
             <div class="menu_button menu_button_icon pf-icon-only pf-toolbar-danger" id="pf-remove-all" title="Remove ALL prompts and/or folders (choose exactly what and whether it's permanent)">
@@ -263,10 +263,11 @@ export function buildDock() {
     document.getElementById('pf-auto-filter').addEventListener('click', openAutoFilterModal);
     document.getElementById('pf-import-export').addEventListener('click', () => {
         showContextMenu(document.getElementById('pf-import-export'), [
-            { label: '📤 Export folder structure…', action: exportFolderStructure },
+            { label: '📤 Export prompt list and folders…', action: exportFolderStructure },
             'separator',
-            { label: '📥 Import (replace current folders)…', action: importFolderStructure },
-            { label: '📥 Import append (adds to your whole folder structure)…', action: importFolderStructureMerge },
+            { label: '📥 Import — Append…', action: importFolderStructureMerge },
+            { label: '📥 Import — Replace matching…', action: importFolderStructureReplaceMatching },
+            { label: '📥 Import — Clear and import…', action: importFolderStructure },
         ]);
     });
     document.getElementById('pf-remove-all').addEventListener('click', () => openRemoveAllMenu(document.getElementById('pf-remove-all')));

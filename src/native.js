@@ -777,16 +777,24 @@ export function lockTextareaReadOnly(textarea) {
  *  button that hands off to the real native editor. */
 function showViewModal(name, identifier, content) {
     closeViewModal();
+    const storedTags = settings().promptTags[identifier];
+    const tags = Array.isArray(storedTags) ? storedTags.filter(tag => typeof tag === 'string' && tag.trim()) : [];
     const overlay = el('div', 'pf-view-overlay');
     overlay.id = 'pf-view-overlay';
     overlay.innerHTML = `
-        <div class="pf-view-modal">
+        <div class="pf-view-modal pf-prompt-view-modal" role="dialog" aria-modal="true" aria-label="View prompt">
             <div class="pf-view-header">
                 <b>${escapeHtml(name)}</b>
                 <span class="pf-view-id">${escapeHtml(identifier)}</span>
                 <span class="pf-icon-btn fa-solid fa-xmark" id="pf-view-close" title="Close"></span>
             </div>
             <div class="pf-view-stats">${wordCount(content)} words · ~${estimateTokens(content)} tokens (estimate)</div>
+            <div class="pf-view-tags" role="group" aria-label="Prompt tags (read-only)">
+                <span class="pf-view-tags-label">Tags</span>
+                <div class="pf-tag-chips">${tags.length
+                    ? tags.map(tag => `<span class="pf-tag-chip">${escapeHtml(tag)}</span>`).join('')
+                    : '<span class="pf-view-hint">No tags</span>'}</div>
+            </div>
             <textarea class="pf-view-content" readonly spellcheck="false"></textarea>
             <div class="pf-view-footer">
                 <span class="pf-view-hint">Read-only preview — editing here does nothing.</span>

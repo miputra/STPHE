@@ -1,3 +1,4 @@
+import { watchPromptTagEditor } from './prompt-tags.js';
 import { isPromptSuppressed, renderTree, scheduleRenderTree } from './render.js';
 import { closeOwnOverlays, findPromptListEl, getOaiModule, readLivePrompts, syncNativePromptOrder } from './native.js';
 import { buildDock } from './panel.js';
@@ -253,6 +254,7 @@ export function watchPromptManager() {
  *  first). buildDock() itself starts watchPromptManager() once the dock exists. */
 jQuery(async () => {
     buildDock();
+    watchPromptTagEditor();
     watchNativePopups();
     watchNativeEditorGuard();
     watchNativeSaveButton();
