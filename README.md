@@ -10,13 +10,19 @@ New STPHE prompt exports also work with SillyTavern's native Prompt Manager impo
 
 See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#340--tags-and-compatible-imports).
 
+## Complete feature guides
+
+The documentation now includes 71 illustrated feature topics: panel controls, nested folders, multi-selection and ordering, prompt creation/editing, multiple tags, read-only viewing, full preview, every manual Filter match mode and target, Chat checks, presets/groups, Auto Filter conditions/effects/timing, all import modes, compatibility, and removal choices. Search goes directly to individual sections.
+
+Start with the [feature directory](https://miputra.github.io/STPHE-Documentation/index.html#features). Each section includes a focused worked-example image; the Manual Filter and tag-editing walkthroughs also show the current controls. See the [coverage inventory](https://github.com/miputra/STPHE-Documentation/blob/main/docs/feature-coverage.md) for the source audit.
+
 ## Your prompt hierarchy, at a glance
 
 ![Focused prompt hierarchy with nested folders and independent toggles](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/hierarchy.png)
 
 Read the indentation from **PF Stress Test → Branch 00 → Section**. Each folder has its own toggle; the triangle expands or collapses its children. This close-up comes from the real-app 500-prompt test and shows only the hierarchy, with the surrounding chat cropped out.
 
-**[Read the documentation](https://miputra.github.io/STPHE-Documentation/)** · [Getting started](https://miputra.github.io/STPHE-Documentation/getting-started.html) · [Detailed reference and release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md)
+**[Read the documentation](https://miputra.github.io/STPHE-Documentation/)** · [Feature directory](https://miputra.github.io/STPHE-Documentation/index.html#features) · [Manual Filter](https://miputra.github.io/STPHE-Documentation/filters.html) · [Prompts & tags](https://miputra.github.io/STPHE-Documentation/prompts.html) · [Detailed reference and release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md)
 
 ## Create folders and arrange the panel
 
@@ -38,7 +44,7 @@ The folder’s toggle mutes its contents. The adjacent check and cross buttons *
 
 ![Filter form showing match source, match type, target and Save controls](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/filter-match.png)
 
-Open the toolbar’s **funnel** to match prompt content by XML tag, word or regex. Choose whether to affect the matching prompts, their last containing folder or all containing folders. Enter a preset name and **Save** to reuse the action later.
+Open the toolbar’s **funnel** to match prompt content by XML tag, word, regex or listed regex values, or match saved **prompt tags**. **Apply** only finds matches; choose a target and **Enable/Disable** to change states. Containing-folder targets can affect nonmatching siblings. Enter a preset name and **Save** to reuse the action later. [Complete manual Filter guide →](https://miputra.github.io/STPHE-Documentation/filters.html)
 
 ![Saved preset nested inside a preset group and subgroup](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/preset-hierarchy.png)
 
@@ -60,7 +66,7 @@ Choose the effect and its targets independently. With **Enable when triggered**,
 
 ![Auto Filter evaluation timing checkboxes](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/auto-timing.png)
 
-The master switch pauses filters. The two timing options independently re-evaluate after generation and before sending. **Before sending (wait for filters)** includes the new user message and waits for effects before request assembly. [Auto Filter →](https://miputra.github.io/STPHE-Documentation/auto-filter.html)
+The master switch pauses filters without undoing previous effects. Chat events schedule evaluations; the timing options add an after-generation check and a guaranteed before-send wait. **Before sending (wait for filters)** includes the new user message and waits for effects before request assembly. [Auto Filter →](https://miputra.github.io/STPHE-Documentation/auto-filter.html)
 
 ## Back up and manage prompts
 
