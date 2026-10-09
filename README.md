@@ -40,6 +40,16 @@ The folder’s toggle mutes its contents. The adjacent check and cross buttons *
 
 **Mute remembers your selection.** Restoring a folder brings back the prompts you intended to enable. A child folder’s own mute remains independent. Use Enable all only when you want every prompt switched on.
 
+### Prompt tags
+
+New and existing prompts have a **Prompt tags** field in the native prompt editor. Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and the native **Save** button to save your changes. Closing without saving discards tag edits. Empty tags and duplicate names (ignoring case) are skipped.
+
+In **Filter**, select **Prompt tag** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
+
+In **Auto Filter**, select **Prompt tag** in the effect's **Match by** menu. The chat condition controls when matching prompts (or their containing folders) are enabled or disabled. Auto Filter exclusions still apply. For an always-on rule, use chat depth 0.
+
+Tags are extension metadata associated with a prompt's identifier; they do not change the prompt text sent to the model. The same identifier shares tags across presets. Extension full, folder, and single-prompt backups include tags; native SillyTavern exports alone do not include this metadata.
+
 ## Save and group filters
 
 ![Filter form showing match source, match type, target and Save controls](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/filter-match.png)
@@ -116,6 +126,9 @@ This was originally intended as a personal project, but I decided to make it pub
 
 I have added comments throughout the code to make development easier, whether for manual fixes or as notes for AI tools working on the project. I hope this helps.
 
+
+
+
 ## Support the project
 
 If you like the project, you can also buy me a coffee.
@@ -125,12 +138,3 @@ If you like the project, you can also buy me a coffee.
 - **Solana:** `C8A5J9w7UkXeLVeCWhpP47SPCPvnuS55RJWybzFhB3jF`
 
 
-### Prompt tags
-
-New and existing prompts have a **Prompt tags** field in the native prompt editor. Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and the native **Save** button to save your changes. Closing without saving discards tag edits. Empty tags and duplicate names (ignoring case) are skipped.
-
-In **Filter**, select **Prompt tag** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
-
-In **Auto Filter**, select **Prompt tag** in the effect's **Match by** menu. The chat condition controls when matching prompts (or their containing folders) are enabled or disabled. Auto Filter exclusions still apply. For an always-on rule, use chat depth 0.
-
-Tags are extension metadata associated with a prompt's identifier; they do not change the prompt text sent to the model. The same identifier shares tags across presets. Extension full, folder, and single-prompt backups include tags; native SillyTavern exports alone do not include this metadata.
