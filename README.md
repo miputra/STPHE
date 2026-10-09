@@ -12,9 +12,9 @@ See the [compatibility table](https://miputra.github.io/STPHE-Documentation/back
 
 ## Complete feature guides
 
-The documentation now includes 71 illustrated feature topics: panel controls, nested folders, multi-selection and ordering, prompt creation/editing, multiple tags, read-only viewing, full preview, every manual Filter match mode and target, Chat checks, presets/groups, Auto Filter conditions/effects/timing, all import modes, compatibility, and removal choices. Search goes directly to individual sections.
+The documentation now includes 71 feature topics with focused application screenshots: panel controls, nested folders, multi-selection and ordering, prompt creation/editing, multiple tags, read-only viewing, full preview, every manual Filter match mode and target, Chat checks, presets/groups, Auto Filter conditions/effects/timing, all import modes, compatibility, and removal choices. Search goes directly to individual sections.
 
-Start with the [feature directory](https://miputra.github.io/STPHE-Documentation/index.html#features). Each section includes a focused worked-example image; the Manual Filter and tag-editing walkthroughs also show the current controls. See the [coverage inventory](https://github.com/miputra/STPHE-Documentation/blob/main/docs/feature-coverage.md) for the source audit.
+Start with the [feature directory](https://miputra.github.io/STPHE-Documentation/index.html#features). Each section opens with a focused screenshot of the feature and a caption identifying the controls, followed by its instructions. Click any screenshot to enlarge it. See the [coverage inventory](https://github.com/miputra/STPHE-Documentation/blob/main/docs/feature-coverage.md) for the source audit.
 
 ## Your prompt hierarchy, at a glance
 
@@ -36,7 +36,7 @@ Click **Folder** to create a folder or **Prompt** to add a prompt. Search finds 
 
 The folder’s toggle mutes its contents. The adjacent check and cross buttons **enable all** or **disable all**. Each prompt row has its own toggle, manual-filter exclusion, Auto Filter exclusion, read-only eye, editor pencil, More actions menu and folder selector. Drag rows to reorder; Ctrl/Cmd-click selects several. [Folders and prompts →](https://miputra.github.io/STPHE-Documentation/folders.html)
 
-![Diagram showing remembered prompt states before, during and after a folder mute](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/mute-restore.svg)
+![Muted Weather folder with retained prompt intentions](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/screen-muted.png)
 
 **Mute remembers your selection.** Restoring a folder brings back the prompts you intended to enable. A child folder’s own mute remains independent. Use Enable all only when you want every prompt switched on.
 
@@ -108,13 +108,15 @@ The row’s **More actions** menu offers rename, insertion, a single-prompt expo
 
 ## Install
 
-![Installation diagram showing repository, required files and first refresh](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/install-files.svg)
+![Extension installation dialog in SillyTavern](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/screen-install.png)
 
 In SillyTavern, open **Extensions → Install extension** and enter `https://github.com/miputra/STPHE`. Reload, select **Chat Completion**, then open **AI Response Configuration** once so the native Prompt Manager renders. Update an existing Prompt Folders installation in place; keep only one copy.
 
+**Manual installation:** Copy the entire project folder into `data\default-user\extensions\` inside your SillyTavern installation. For example, `data\default-user\extensions\STPHE\` should directly contain `manifest.json`, `index.js`, `style.css`, and `src/`. Reload SillyTavern afterward.
+
 ## Compatibility and troubleshooting
 
-![Diagram of native apply, verification and hierarchy paint](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/loading-flow.svg)
+![Refresh and other STPHE toolbar controls](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/screen-toolbar.png)
 
 Folder changes apply to the native prompt list, verify their states, then repaint the hierarchy before unlocking. The integration was checked with **SillyTavern 1.18.0**. Large presets can take time. Reordering and native UI integration are best-effort across versions; verify important prompt sequencing in AI Response Configuration after reloading. [Troubleshooting →](https://miputra.github.io/STPHE-Documentation/troubleshooting.html)
 
