@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
     version: 7,
     filterGroups: {},
     folders: [],        // explicit list of folder paths, e.g. ["Jailbreak", "Jailbreak/NSFW"]
+    folderTags: {},      // { "Folder/Sub": [tag, ...] } — extension metadata for folders
     promptTags: {},      // { promptIdentifier: [tag, ...] } — extension metadata, never prompt content
     assignments: {},     // { promptIdentifier: "Folder/Sub" }
     order: {},            // { parentPath: [{type:'folder'|'prompt', key}, ...] } manual sibling order
@@ -92,6 +93,7 @@ export function settings() {
     const s = extension_settings[MODULE];
     if (!Number.isFinite(s.version) || s.version < DEFAULT_SETTINGS.version) s.version = DEFAULT_SETTINGS.version;
     if (!Array.isArray(s.folders)) s.folders = [];
+    if (!s.folderTags || typeof s.folderTags !== 'object' || Array.isArray(s.folderTags)) s.folderTags = {};
     if (!s.promptTags || typeof s.promptTags !== 'object' || Array.isArray(s.promptTags)) s.promptTags = {};
     if (typeof s.assignments !== 'object' || !s.assignments) s.assignments = {};
     if (typeof s.order !== 'object' || !s.order) s.order = {};
@@ -108,9 +110,15 @@ export function settings() {
     if (typeof s.autoFilterDisabled !== 'boolean') s.autoFilterDisabled = false;
     if (typeof s.autoFilterOnSendClick !== 'boolean') s.autoFilterOnSendClick = false;
     if (typeof s.autoFilterOnGenerationDone !== 'boolean') s.autoFilterOnGenerationDone = true;
-    s.autoFilters = s.autoFilters.map(migrateAutoFilter);
+    for (let i = 0; i < s.autoFilters.length; i++) {
+        const migrated = migrateAutoFilter(s.autoFilters[i]);
+        if (migrated !== s.autoFilters[i]) s.autoFilters[i] = migrated;
+    }
     if (!Array.isArray(s.matchPresets)) s.matchPresets = [];
-    s.matchPresets = s.matchPresets.map(migrateMatchPreset);
+    for (let i = 0; i < s.matchPresets.length; i++) {
+        const migrated = migrateMatchPreset(s.matchPresets[i]);
+        if (migrated !== s.matchPresets[i]) s.matchPresets[i] = migrated;
+    }
     if (!Array.isArray(s.chatMatchPresets)) s.chatMatchPresets = [];
     if (typeof s.ui !== 'object' || !s.ui) s.ui = structuredClone(DEFAULT_SETTINGS.ui);
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS.ui)) {
@@ -309,6 +317,10 @@ export function rewritePathEverywhere(oldPath, newPath) {
     const newExcludedAutoFolders = {};
     for (const [p, v] of Object.entries(s.excludedAutoFolders)) newExcludedAutoFolders[remap(p)] = v;
     s.excludedAutoFolders = newExcludedAutoFolders;
+
+    const newFolderTags = {};
+    for (const [p, v] of Object.entries(s.folderTags || {})) newFolderTags[remap(p)] = v;
+    s.folderTags = newFolderTags;
 
     const newOrder = {};
     for (const [parentKey, arr] of Object.entries(s.order)) {

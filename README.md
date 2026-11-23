@@ -4,7 +4,7 @@ Organize SillyTavern’s Chat Completion prompts into folders and nested subfold
 
 ## 3.4.0 — Tags and compatible imports
 
-Released 2026-10-09. Prompt tags, individual filter/rule exports, and the three import modes are now available. Full, folder, and single-prompt STPHE backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
+Prompt and folder tags, group-level filter/rule exports, preset group enable/disable actions, drag-and-drop filter reordering, and the three import modes are available. Full and folder STPHE backups include prompt and folder tags; single-prompt backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
 
 New STPHE prompt exports also work with SillyTavern's native Prompt Manager importer. **Use STPHE's importer to restore tags, folders, and filter settings**; native SillyTavern reads only the prompt definitions and order. Append preserves existing tags; Replace matching applies imported tags. Older backups without tags keep existing tags. Individual filter exports include their tag-matching criteria, not the tagged prompts themselves.
 
@@ -40,25 +40,25 @@ The folder’s toggle mutes its contents. The adjacent check and cross buttons *
 
 **Mute remembers your selection.** Restoring a folder brings back the prompts you intended to enable. A child folder’s own mute remains independent. Use Enable all only when you want every prompt switched on.
 
-### Prompt tags
+### Prompt and folder tags
 
-New and existing prompts have a **Prompt tags** field in the native prompt editor. Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and the native **Save** button to save your changes. Closing without saving discards tag edits. Empty tags and duplicate names (ignoring case) are skipped.
+New and existing prompts have a **Prompt tags** field in the native prompt editor, and every named folder has a tag button on its row (and **Edit tags…** in its More actions menu). Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and **Save** to commit your changes. Closing or canceling discards unsaved tag edits. Empty tags and duplicate names (ignoring case) are skipped. Folder tags follow rename, move, and delete operations.
 
-In **Filter**, select **Prompt tag** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
+In **Filter**, select **Tag (prompt / folder)** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, matches both tagged prompts and tagged folders without scanning prompt content, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
 
-In **Auto Filter**, select **Prompt tag** in the effect's **Match by** menu. The chat condition controls when matching prompts (or their containing folders) are enabled or disabled. Auto Filter exclusions still apply. For an always-on rule, use chat depth 0.
+In **Auto Filter**, select **Tag (prompt / folder)** in the effect's **Match by** menu. The chat condition controls when matching prompts and folders (or their containing folders) are enabled or disabled. Auto Filter exclusions still apply. For an always-on rule, use chat depth 0. Every matched prompt and folder is enabled or disabled even when a parent folder is disabled.
 
-Tags are extension metadata associated with a prompt's identifier; they do not change the prompt text sent to the model. The same identifier shares tags across presets. Extension full, folder, and single-prompt backups include tags; native SillyTavern exports alone do not include this metadata.
+Tags are extension metadata (keyed by prompt identifier or folder path); they do not change the prompt text sent to the model. The same prompt identifier shares tags across presets. Extension full and folder backups include both prompt tags and folder tags, and single-prompt backups include prompt tags; native SillyTavern exports alone do not include this metadata.
 
 ## Save and group filters
 
 ![Filter form showing match source, match type, target and Save controls](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/filter-match.png)
 
-Open the toolbar’s **funnel** to match prompt content by XML tag, word, regex or listed regex values, or match saved **prompt tags**. **Apply** only finds matches; choose a target and **Enable/Disable** to change states. Containing-folder targets can affect nonmatching siblings. Enter a preset name and **Save** to reuse the action later. [Complete manual Filter guide →](https://miputra.github.io/STPHE-Documentation/filters.html)
+Open the toolbar’s **funnel** to match prompt content by XML tag, word, regex or listed regex values, or match saved **prompt and folder tags**. **Apply** only finds matches; choose a target and **Enable/Disable** to change states. Containing-folder targets can affect nonmatching siblings. Enter a preset name and **Save** to reuse the action later. [Complete manual Filter guide →](https://miputra.github.io/STPHE-Documentation/filters.html)
 
 ![Saved preset nested inside a preset group and subgroup](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/preset-hierarchy.png)
 
-**＋ Preset group** creates a group for saved actions; the group’s **＋** creates a subgroup. Move presets with the row selector or drag them. A preset lock blocks its actions, while a group’s On control gates its descendants without changing their locks. This existing test capture predates the STPHE rename. [Filter presets →](https://miputra.github.io/STPHE-Documentation/presets.html)
+**＋ Preset group** creates a group for saved actions; the group’s **＋** creates a subgroup. Drag preset rows or group headers to reorder them (top-to-bottom execution priority) or move presets with the row selector. Each preset group header has **Enable** and **Disable** toggles to run all unlocked, enabled presets inside that group and its subgroups from top to bottom, plus an **Export** button to export that group. A preset lock blocks its actions, while a group’s **On/Off** gate blocks its descendants and group toggles without changing individual locks. This existing test capture predates the STPHE rename. [Filter presets →](https://miputra.github.io/STPHE-Documentation/presets.html)
 
 ![Chat matching source and recent-message depth](https://raw.githubusercontent.com/miputra/STPHE-Documentation/main/docs/assets/chat-filter.png)
 
@@ -94,7 +94,7 @@ Prompt lists, Filter presets, Chat filter presets, and Auto Filter rules share t
 
 Matching uses the ID first, then a unique name, ignoring case and surrounding spaces. Replacing a match preserves its local ID so existing references continue to work. Ambiguous names or invalid files stop the import before changes are applied. You see a confirmation with the affected scope before importing.
 
-Each preset or Auto Filter row has an **Export** button. Each of the three filter collections has its own **Import…**, mode selector, and **Export all…** controls. Importing one preset uses that collection's Import control. These files include the selected rules and their groups, but do not bundle prompt definitions; manually selected prompt IDs and folder paths must exist at the destination.
+Each filter group header has an **Export** button that downloads all presets or rules inside that group (including subgroups and ancestor groups). Each of the three filter collections also has its own **Import…**, mode selector, and **Export all…** controls. Importing a group export uses that collection's Import control. These files include the selected rules and their groups, but do not bundle prompt definitions; manually selected prompt IDs and folder paths must exist at the destination.
 
 **Clear and import** for a prompt list clears the active list and its folder organization, then imports the file. Reusable prompt definitions remain available and other lists are retained. Included filter collections use the selected mode; collections absent from the file stay unchanged. Clearing a filter collection affects only that collection and its groups. The separate **Append after this entry** action retains its existing placement workflow.
 

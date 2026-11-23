@@ -1,4 +1,4 @@
-import { buildFilterGroups, isFilterGroupDisabled } from './filter-groups.js';
+import { buildFilterGroups, isFilterGroupDisabled, orderedGroupItems } from './filter-groups.js';
 // ---------- Auto Filter (condition ⇒ effect rules, toolbar-only) ----------
 //
 import { getContext } from '../../../../extensions.js';
@@ -34,7 +34,7 @@ export const AUTO_MATCH_TYPES = [
 ];
 
 /** Looks up an AUTO_MATCH_TYPES entry by its key. */
-const AUTO_EFFECT_TYPES = [...AUTO_MATCH_TYPES, { key: 'tag', label: 'Prompt tag', kind: 'tag' }];
+const AUTO_EFFECT_TYPES = [...AUTO_MATCH_TYPES, { key: 'tag', label: 'Tag (prompt / folder)', kind: 'tag' }];
 export function autoMatchDef(key) { return AUTO_EFFECT_TYPES.find(t => t.key === key); }
 
 // The old system had six fixed match types (All/Specific × Character/Location/Time), each keyed
@@ -226,49 +226,54 @@ async function computeAutoEffectTargets(effect) {
         ? { type: 'regex', text: effect.text || '' }
         : { type: 'word', text: effect.text || '', caseSensitive: !!effect.caseSensitive };
     const result = await computeMatches(null, params, undefined, 'auto');
-    return { prompts: result.matched || [], folders: [], mode: 'match', target: effect.target || 'prompt' };
+    return { prompts: result.matched || [], folders: result.matchedFolders || [], mode: 'match', target: effect.target || 'prompt' };
 }
 
-/** Applies one rule's single triggered/not-triggered verdict to its whole effect set — skipping
- *  anything already in the desired state, so a steady-state re-evaluation (nothing actually
- *  changed in chat) is a genuine no-op rather than re-clicking every native toggle every time. */
-async function applyAutoEffect(targetSet, desiredEnabled) {
-    const s = settings();
-    let promptCount = 0, folderCount = 0;
-
-    if (targetSet.mode === 'manual') {
-        const promptChanges = targetSet.prompts
-            .filter(p => isPromptLogicallyEnabled(p, s) !== desiredEnabled)
-            .map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
-        await setPromptsLogicalState(promptChanges);
-        promptCount = promptChanges.length;
-        for (const path of targetSet.folders) {
-            const desiredOff = !desiredEnabled;
-            if (!!s.folderDisabled[path] !== desiredOff) { await setFolderMaster(path, desiredOff); folderCount++; }
-        }
-        return { promptCount, folderCount };
+function resolveAutoEffectTargets(targetSet, s) {
+    if (!targetSet) return { prompts: [], folders: [] };
+    if (targetSet.mode === 'manual' || targetSet.target === 'prompt') {
+        return {
+            prompts: targetSet.prompts || [],
+            folders: [...new Set(targetSet.folders || [])],
+        };
     }
-
-    if (targetSet.target === 'prompt') {
-        const promptChanges = targetSet.prompts
-            .filter(p => isPromptLogicallyEnabled(p, s) !== desiredEnabled)
-            .map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
-        await setPromptsLogicalState(promptChanges);
-        promptCount = promptChanges.length;
-        return { promptCount, folderCount };
-    }
-
     const folderPaths = new Set();
-    for (const p of targetSet.prompts) {
-        const direct = s.assignments[p.identifier] || ROOT;
+    for (const path of (targetSet.folders || [])) {
+        if (targetSet.target === 'folder-all') { for (const anc of ancestorChain(path)) folderPaths.add(anc); }
+        else folderPaths.add(path);
+    }
+    for (const p of (targetSet.prompts || [])) {
+        const direct = s?.assignments?.[p.identifier] || ROOT;
         if (targetSet.target === 'folder-all') { for (const anc of ancestorChain(direct)) folderPaths.add(anc); }
         else folderPaths.add(direct);
     }
-    for (const path of folderPaths) {
-        const desiredOff = !desiredEnabled;
-        if (!!s.folderDisabled[path] !== desiredOff) { await setFolderMaster(path, desiredOff); folderCount++; }
+    return { prompts: [], folders: [...folderPaths] };
+}
+
+/** Applies one rule's single triggered/not-triggered verdict to every matched folder and
+ *  prompt — including subfolders and prompts inside a disabled parent folder — skipping only
+ *  items already in the desired state. */
+async function applyAutoEffect(targetSet, desiredEnabled) {
+    const s = settings();
+    const { prompts: targetPrompts, folders: targetFolders } = resolveAutoEffectTargets(targetSet, s);
+    const desiredOff = !desiredEnabled;
+    let promptCount = 0, folderCount = 0;
+
+    for (const path of targetFolders) {
+        if (!!s.folderDisabled?.[path] !== desiredOff) {
+            await setFolderMaster(path, desiredOff);
+            folderCount++;
+        }
     }
-    return { promptCount, folderCount: folderPaths.size };
+
+    const promptChanges = targetPrompts
+        .filter(p => isPromptLogicallyEnabled(p, s) !== desiredEnabled)
+        .map(p => ({ identifier: p.identifier, enabled: desiredEnabled }));
+    if (promptChanges.length > 0) {
+        await setPromptsLogicalState(promptChanges);
+        promptCount = promptChanges.length;
+    }
+    return { promptCount, folderCount };
 }
 
 /** Evaluates one rule end-to-end: its condition (evaluateAutoCondition), its effect's target set
@@ -296,9 +301,7 @@ let autoFilterIdle = Promise.resolve();
  *  overlapping two, since overlapping passes could both read stale liveCache/chat snapshots and
  *  fight each other over the same folder. The master "Disable all filters" switch and an empty
  *  list both short-circuit before touching anything.
- *  Returns a status object so callers that care (the "Re-evaluate now" button) can report what
- *  actually happened instead of a blind "Re-evaluated." — background/automatic callers can just
- *  ignore the return value. */
+ *  Enabled rules run strictly in top-to-bottom visual order. */
 async function evaluateAutoFilters() {
     const s = settings();
     if (s.autoFilterDisabled) return { ok: false, reason: 'disabled' };
@@ -312,7 +315,10 @@ async function evaluateAutoFilters() {
     let rulesRun = 0, prompts = 0, folders = 0;
     try {
         const xmlGroupCache = new Map(); // see xmlConditionGroups() — shared across this pass's condition checks
-        for (const filter of s.autoFilters) {
+        const orderedFilters = typeof orderedGroupItems === 'function'
+            ? orderedGroupItems('autoFilters', s.autoFilters)
+            : s.autoFilters;
+        for (const filter of orderedFilters) {
             if (filter.enabled === false || isFilterGroupDisabled('autoFilters', filter)) continue;
             rulesRun++;
             const counts = await applyAutoFilter(filter, xmlGroupCache);
@@ -425,7 +431,7 @@ function describeAutoFilterEffect(effect) {
     if (def?.kind === 'xml') valueBit = `: ${describeXmlSpec(effect.xmlTag, effect.xmlParams)}`;
     else if (def?.kind === 'tag' || def?.kind === 'regex' || def?.kind === 'word') valueBit = effect.text ? `: ${effect.text}` : '';
     const caseBit = (def?.kind === 'word' && effect.caseSensitive) ? ' (Aa)' : '';
-    const targetLabel = effect.target === 'folder-all' ? 'all containing folders' : effect.target === 'folder-last' ? 'last containing folder' : 'the prompt';
+    const targetLabel = effect.target === 'folder-all' ? 'all containing folders' : effect.target === 'folder-last' ? 'last containing folder' : (def?.kind === 'tag' ? 'the prompt / folder' : 'the prompt');
     return `${label}${valueBit}${caseBit} → ${targetLabel}`;
 }
 
@@ -434,44 +440,6 @@ function describeAutoFilterEffect(effect) {
 function describeAutoFilter(filter) {
     const action = filter.action === 'disable' ? 'Disable' : 'Enable';
     return `${describeAutoFilterCondition(filter.condition)} ⇒ ${action}: ${describeAutoFilterEffect(filter.effect)}`;
-}
-
-/** Simple linear drag-to-reorder for the flat Auto Filter list — deliberately much simpler than
- *  the folder tree's attachDndHandlers (no "into" zone, no refiling — a rule can only ever move
- *  before/after another rule in the one flat list, which is exactly what determines execution
- *  order). */
-function attachAutoFilterDnd(rowEl, filterId, onDropped) {
-    rowEl.setAttribute('draggable', 'true');
-    rowEl.addEventListener('dragstart', ev => {
-        ev.dataTransfer.setData('application/pf-autofilter', filterId);
-        ev.dataTransfer.effectAllowed = 'move';
-    });
-    rowEl.addEventListener('dragover', ev => {
-        ev.preventDefault();
-        const rect = rowEl.getBoundingClientRect();
-        const zone = (ev.clientY - rect.top) / rect.height < 0.5 ? 'before' : 'after';
-        rowEl.classList.remove('pf-drop-before', 'pf-drop-after');
-        rowEl.classList.add('pf-drop-' + zone);
-        rowEl.dataset.dropZone = zone;
-    });
-    rowEl.addEventListener('dragleave', () => rowEl.classList.remove('pf-drop-before', 'pf-drop-after'));
-    rowEl.addEventListener('drop', ev => {
-        ev.preventDefault();
-        const zone = rowEl.dataset.dropZone || 'after';
-        rowEl.classList.remove('pf-drop-before', 'pf-drop-after');
-        const draggedId = ev.dataTransfer.getData('application/pf-autofilter');
-        if (!draggedId || draggedId === filterId) return;
-        const s = settings();
-        const fromIdx = s.autoFilters.findIndex(f => f.id === draggedId);
-        if (fromIdx === -1) return;
-        const [dragged] = s.autoFilters.splice(fromIdx, 1);
-        let toIdx = s.autoFilters.findIndex(f => f.id === filterId);
-        if (toIdx === -1) toIdx = s.autoFilters.length;
-        if (zone === 'after') toIdx += 1;
-        s.autoFilters.splice(toIdx, 0, dragged);
-        save();
-        onDropped();
-    });
 }
 
 let autoFilterEditingId = null; // non-null while the form below is editing an existing rule rather than adding a new one
@@ -574,7 +542,7 @@ export function openAutoFilterModal() {
                             <label><input type="checkbox" id="pf-af-eff-case" /> Case sensitive</label>
                         </div>
                         <div class="pf-bm-row pf-bm-radio-row">
-                            <label><input type="radio" name="pf-af-eff-target" value="prompt" checked /> The prompt</label>
+                            <label><input type="radio" name="pf-af-eff-target" value="prompt" checked /> The prompt / folder</label>
                             <label><input type="radio" name="pf-af-eff-target" value="folder-last" /> Last containing folder</label>
                             <label><input type="radio" name="pf-af-eff-target" value="folder-all" /> All containing folders</label>
                         </div>
@@ -697,7 +665,7 @@ export function openAutoFilterModal() {
         effTextRow.style.display = (def?.kind === 'tag' || def?.kind === 'regex' || def?.kind === 'word') ? 'flex' : 'none';
         effCaseRow.style.display = def?.kind === 'word' ? 'flex' : 'none';
         if (def?.kind === 'regex') { effTextLabel.textContent = 'Regex'; effTextInput.placeholder = 'e.g. \\btavern\\b'; }
-        if (def?.kind === 'tag') { effTextLabel.textContent = 'Prompt tag'; effTextInput.placeholder = 'Exact tag name (ignores case)'; }
+        if (def?.kind === 'tag') { effTextLabel.textContent = 'Tag'; effTextInput.placeholder = 'Exact tag name (ignores case)'; }
         if (def?.kind === 'word') { effTextLabel.textContent = 'Word'; effTextInput.placeholder = 'e.g. tavern'; }
     }
     function renderManualChecklists() {
@@ -817,11 +785,12 @@ export function openAutoFilterModal() {
         listEl.innerHTML = '';
         const groups = buildFilterGroups(listEl, 'autoFilters', s.autoFilters, renderList, () => scheduleAutoFilterEval(0));
         if (!s.autoFilters.length) { listEl.appendChild(el('div', 'pf-empty-hint', { text: 'No auto filters yet.' })); return; }
+        const ordered = orderedGroupItems('autoFilters', s.autoFilters);
         for (const filter of s.autoFilters) {
             const row = el('div', 'pf-prompt-row');
             row.dataset.filterId = filter.id;
 
-            const dragHandle = el('span', 'pf-icon-btn fa-solid fa-grip-vertical', { title: 'Drag to reorder (execution order)' });
+            const dragHandle = el('span', 'pf-icon-btn fa-solid fa-grip-vertical pf-drag-handle', { title: 'Drag to reorder (top-to-bottom execution order)' });
 
             const enableCb = document.createElement('input');
             enableCb.type = 'checkbox';
@@ -834,7 +803,8 @@ export function openAutoFilterModal() {
             });
 
             const info = el('span', 'pf-prompt-name');
-            info.innerHTML = `<b>${s.autoFilters.indexOf(filter) + 1}. ${escapeHtml(filter.name || 'Filter')}</b><br><span style="opacity:.7; font-size:0.85em">${escapeHtml(describeAutoFilter(filter))}</span>`;
+            const orderNum = ordered.indexOf(filter) + 1;
+            info.innerHTML = `<b>${orderNum}. ${escapeHtml(filter.name || 'Filter')}</b><br><span style="opacity:.7; font-size:0.85em">${escapeHtml(describeAutoFilter(filter))}</span>`;
 
             const editBtn = el('span', 'pf-icon-btn fa-solid fa-pen', { title: 'Edit this filter' });
             editBtn.addEventListener('click', () => loadFilterIntoForm(filter));
@@ -855,7 +825,6 @@ export function openAutoFilterModal() {
             row.appendChild(editBtn);
             row.appendChild(delBtn);
 
-            attachAutoFilterDnd(row, filter.id, () => { renderList(); scheduleAutoFilterEval(0); });
             groups.add(row, filter);
         }
     }

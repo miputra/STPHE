@@ -5,7 +5,7 @@ import { renderTree } from './render.js';
 import { save, settings } from './state.js';
 import { scheduleAutoFilterEval } from './auto-filter.js';
 
-const MAP_FIELDS = ['assignments', 'order', 'collapsed', 'folderDisabled', 'folderSnapshot', 'promptDesired', 'excludedPrompts', 'excludedFolders', 'excludedAutoPrompts', 'excludedAutoFolders'];
+const MAP_FIELDS = ['assignments', 'order', 'collapsed', 'folderDisabled', 'folderSnapshot', 'folderTags', 'promptDesired', 'excludedPrompts', 'excludedFolders', 'excludedAutoPrompts', 'excludedAutoFolders'];
 const PROMPT_MAPS = ['assignments', 'promptTags', 'promptDesired', 'excludedPrompts', 'excludedAutoPrompts'];
 const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -17,6 +17,7 @@ function validateData(data) {
     if (data.prompt_order !== undefined && (!Array.isArray(data.prompt_order) || data.prompt_order.length > 1 || data.prompt_order.some(p => !isObject(p) || !Array.isArray(p.order) || p.order.some(e => !isObject(e) || typeof e.identifier !== 'string' || !e.identifier.trim() || (e.enabled !== undefined && typeof e.enabled !== 'boolean'))))) throw new Error('Choose an export containing one prompt list with valid entries.');
     if (Object.values(data.assignments || {}).some(p => typeof p !== 'string')) throw new Error('Invalid folder assignments.');
     if (Object.values(data.promptTags || {}).some(tags => !Array.isArray(tags) || tags.some(tag => typeof tag !== 'string'))) throw new Error('Invalid prompt tags.');
+    if (Object.values(data.folderTags || {}).some(tags => !Array.isArray(tags) || tags.some(tag => typeof tag !== 'string'))) throw new Error('Invalid folder tags.');
     for (const key of ['collapsed','folderDisabled','promptDesired','excludedPrompts','excludedFolders','excludedAutoPrompts','excludedAutoFolders']) {
         if (Object.values(data[key] || {}).some(value => typeof value !== 'boolean')) throw new Error(`Invalid ${key} state.`);
     }
@@ -64,7 +65,7 @@ export function planPromptListImport(current, definitions, activeOrder, input, m
     if (mode === 'append') {
         const existingIds = new Set((activeOrder || []).map(entry => entry.identifier));
         for (const key of PROMPT_MAPS) if (folderData[key]) folderData[key] = Object.fromEntries(Object.entries(folderData[key]).filter(([id]) => !existingIds.has(id)));
-        for (const key of ['collapsed','folderDisabled','folderSnapshot','excludedFolders','excludedAutoFolders']) if (folderData[key]) {
+        for (const key of ['collapsed','folderDisabled','folderSnapshot','folderTags','excludedFolders','excludedAutoFolders']) if (folderData[key]) {
             folderData[key] = Object.fromEntries(Object.entries(folderData[key]).filter(([path]) => !current.folders.includes(path)));
         }
     }

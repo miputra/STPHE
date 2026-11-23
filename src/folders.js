@@ -76,6 +76,9 @@ export function deleteFolder(path) {
     for (const key of Object.keys(s.excludedAutoFolders)) {
         if (isDescendantOrSelf(key, path)) delete s.excludedAutoFolders[key];
     }
+    for (const key of Object.keys(s.folderTags || {})) {
+        if (isDescendantOrSelf(key, path)) delete s.folderTags[key];
+    }
     for (const key of Object.keys(s.order)) {
         if (key === path || key.startsWith(path + '/')) { delete s.order[key]; continue; }
         s.order[key] = s.order[key].filter(e => !(e.type === 'folder' && isDescendantOrSelf(e.key, path)));

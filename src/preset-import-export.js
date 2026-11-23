@@ -132,6 +132,23 @@ export function exportPresets(key, item = null) {
     downloadJson(data, `${name || key}.json`);
 }
 
+/** Exports all filters/presets inside `groupPath` (and its subgroups), along with the group
+ *  hierarchy (its ancestors, itself, and its subgroups) and their collapsed/disabled states. */
+export function exportPresetGroup(key, groupPath) {
+    const s = settings();
+    const withinGroup = path => path === groupPath || path.startsWith(groupPath + '/');
+    const keepFolder = path => withinGroup(path) || groupPath.startsWith(path + '/');
+    const items = (s[key] || []).filter(item => withinGroup(item.group || ''));
+    const groups = structuredClone(s.filterGroups?.[key] || { folders: [], collapsed: {}, disabled: {} });
+    groups.folders = (groups.folders || []).filter(keepFolder);
+    for (const field of ['collapsed', 'disabled']) {
+        groups[field] = Object.fromEntries(Object.entries(groups[field] || {}).filter(([path]) => keepFolder(path)));
+    }
+    const data = { exportedBy: 'prompt-folders', version: 1, [key]: items, filterGroups: { [key]: groups } };
+    const leaf = (groupPath.split('/').pop() || key).replace(/[^a-z0-9_-]+/gi, '-');
+    downloadJson(data, `${leaf || key}.json`);
+}
+
 export function importPresets(key, mode, refresh) {
     readJsonFile(async data => {
         const s = settings();
@@ -160,5 +177,15 @@ export function addPresetTransferControls(container, key, refresh) {
 export function presetExportButton(key, item) {
     const button = el('button', 'pf-icon-btn fa-solid fa-file-export', {type:'button',title:`Export ${item.name || 'preset'}`, 'aria-label':`Export ${item.name || 'preset'}`});
     button.addEventListener('click', event => { event.stopPropagation(); exportPresets(key, item); });
+    return button;
+}
+
+export function groupExportButton(key, groupPath) {
+    const button = el('button', 'menu_button fa-solid fa-file-export', {
+        type: 'button',
+        title: `Export group ${groupPath}`,
+        'aria-label': `Export group ${groupPath}`,
+    });
+    button.addEventListener('click', event => { event?.stopPropagation?.(); exportPresetGroup(key, groupPath); });
     return button;
 }

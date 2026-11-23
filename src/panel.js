@@ -45,7 +45,7 @@ function panelHtml() {
             <div class="menu_button menu_button_icon" id="pf-preview" title="Preview full compiled prompt + word/token count">
                 <i class="fa-solid fa-file-lines"></i><span>Preview</span>
             </div>
-            <div class="menu_button menu_button_icon pf-icon-only" id="pf-bulk-match" title="Filter: enable/disable prompts by prompt tag or content (XML tag / word / regex)">
+            <div class="menu_button menu_button_icon pf-icon-only" id="pf-bulk-match" title="Filter: enable/disable prompts and folders by tag or content (XML tag / word / regex)">
                 <i class="fa-solid fa-filter"></i>
             </div>
             <div class="menu_button menu_button_icon pf-icon-only" id="pf-auto-filter" title="Auto Filter: enable/disable prompts automatically based on recent chat content">

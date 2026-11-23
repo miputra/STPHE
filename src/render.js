@@ -6,6 +6,7 @@ import { attachDndHandlers, attachRootDropTarget } from './dnd.js';
 import { assignPrompt, createFolder, deleteFolder, insertNewFolderRelative, renameFolder, toggleCollapsed } from './folders.js';
 import { exportFolder, exportPrompt, importFolderStructureAppendAfter } from './import-export.js';
 import { bulkDeletePromptsPermanently, bulkUnlistPrompts, deletePromptFlow, forceNativeRerender, openNativeEditor, readLivePrompts, renamePromptNative, requestNewPromptAfter, syncNativePromptOrder, toggleManyWithRetry, unlistPromptFlow, viewPrompt } from './native.js';
+import { openFolderTagsModal } from './prompt-tags.js';
 import { ROOT, el, flattenPromptOrder, isDescendantOrSelf, joinPath, nameOf, orderedChildren, save, settings, toastError } from './state.js';
 
 // ---------- Multi-select (Ctrl/Cmd+click) ----------
@@ -292,6 +293,7 @@ async function deleteFolderPermanently(path) {
  *  on whether affected prompts should end up Unfiled or gone from assignments entirely). */
 function clearAllFolders(s) {
     s.folders = [];
+    s.folderTags = {};
     s.collapsed = {};
     s.folderDisabled = {};
     s.folderSnapshot = {};
@@ -781,9 +783,23 @@ function renderFolder(path, depth, parentPath) {
     const toggle = renderFolderToggle(path);
     const { allOnBtn, allOffBtn } = renderFolderAllButtons(path);
 
+    let tagBtn = null;
     let excludeBtn = null;
     let autoExcludeBtn = null;
     if (path !== ROOT) {
+        const folderTags = Array.isArray(s.folderTags?.[path])
+            ? s.folderTags[path].filter(t => typeof t === 'string' && t.trim())
+            : [];
+        tagBtn = el('span', `pf-icon-btn fa-solid ${folderTags.length ? 'fa-tags pf-has-tags' : 'fa-tag'}`, {
+            title: folderTags.length
+                ? `Folder tags: ${folderTags.join(', ')} — click to edit`
+                : 'Add or edit tags for this folder',
+        });
+        tagBtn.addEventListener('click', ev => {
+            ev.stopPropagation();
+            openFolderTagsModal(path);
+        });
+
         const excluded = !!s.excludedFolders[path];
         excludeBtn = el('span', `pf-icon-btn fa-solid ${excluded ? 'fa-filter-circle-xmark' : 'fa-filter'}`, {
             title: excluded
@@ -827,7 +843,7 @@ function renderFolder(path, depth, parentPath) {
         const items = [
             { label: '📁 New subfolder', action: async () => { createFolder(path, await promptOrNull('New subfolder name:')); s.collapsed[path] = false; save(); renderTree(); } },
             { label: '➕ New prompt inside', action: () => requestNewPromptAfter(path, null) },
-            { label: '🎯 Filter this folder by content…', action: () => openBulkMatchModal(path) },
+            { label: '🎯 Filter this folder by content or tag…', action: () => openBulkMatchModal(path) },
         ];
         if (path !== ROOT) {
             items.push('separator');
@@ -835,6 +851,7 @@ function renderFolder(path, depth, parentPath) {
                 const newName = await promptOrNull('Rename folder:', nameOf(path));
                 if (newName && newName.trim() && newName.trim() !== nameOf(path)) { renameFolder(path, newName.trim()); renderTree(); }
             } });
+            items.push({ label: '🏷 Edit tags…', action: () => openFolderTagsModal(path) });
             items.push({ label: '📤 Export this folder', action: () => exportFolder(path) });
             items.push({ label: '➕ New prompt after this folder', action: () => requestNewPromptAfter(parentPath, { type: 'folder', key: path }) });
             items.push({ label: '📁 New folder after this folder', action: () => insertNewFolderRelative(parentPath, { type: 'folder', key: path }) });
@@ -852,6 +869,7 @@ function renderFolder(path, depth, parentPath) {
     });
 
     row.append(collapseBtn, icon, nameEl, toggle, allOnBtn, allOffBtn);
+    if (tagBtn) row.append(tagBtn);
     if (excludeBtn) row.append(excludeBtn);
     if (autoExcludeBtn) row.append(autoExcludeBtn);
     row.append(menuBtn);
@@ -906,7 +924,7 @@ let renderedValues = null;
 // event handlers, scroll position and DOM nodes when only these values change.
 function treeStructureKey(live, s) {
     return JSON.stringify([live.map(p => [p.identifier, p.editable, searchTerm ? p.name : null]),
-        s.folders, s.assignments, s.order, s.collapsed, s.excludedPrompts, s.excludedFolders,
+        s.folders, s.folderTags, s.assignments, s.order, s.collapsed, s.excludedPrompts, s.excludedFolders,
         s.excludedAutoPrompts, s.excludedAutoFolders, searchTerm, selectionEntries()]);
 }
 function patchTree(container) {

@@ -88,6 +88,7 @@ export async function exportFolderStructure() {
         collapsed: s.collapsed,
         folderDisabled: s.folderDisabled,
         folderSnapshot: s.folderSnapshot,
+        folderTags: s.folderTags,
         promptTags: s.promptTags,
         promptDesired: s.promptDesired,
         excludedPrompts: s.excludedPrompts,
@@ -142,6 +143,7 @@ export async function exportFolder(path) {
         collapsed: {},
         folderDisabled: {},
         folderSnapshot: {},
+        folderTags: {},
         promptTags: {},
         promptDesired: {},
         excludedPrompts: {},
@@ -154,6 +156,7 @@ export async function exportFolder(path) {
     for (const [k, v] of Object.entries(s.collapsed)) if (folderSet.has(k)) data.collapsed[k] = v;
     for (const [k, v] of Object.entries(s.folderDisabled)) if (folderSet.has(k)) data.folderDisabled[k] = v;
     for (const [k, v] of Object.entries(s.folderSnapshot)) if (folderSet.has(k)) data.folderSnapshot[k] = v;
+    for (const [k, v] of Object.entries(s.folderTags || {})) if (folderSet.has(k)) data.folderTags[k] = v;
     for (const [k, v] of Object.entries(s.excludedFolders)) if (folderSet.has(k)) data.excludedFolders[k] = v;
     for (const [k, v] of Object.entries(s.excludedAutoFolders)) if (folderSet.has(k)) data.excludedAutoFolders[k] = v;
     for (const [id, v] of Object.entries(s.excludedPrompts)) if (isDescendantOrSelf(s.assignments[id] || ROOT, path)) data.excludedPrompts[id] = v;
@@ -539,6 +542,8 @@ export function mergeFolderStructure(s, data) {
     fillMissing(s.collapsed, data.collapsed);
     fillMissing(s.folderDisabled, data.folderDisabled);
     fillMissing(s.folderSnapshot, data.folderSnapshot);
+    s.folderTags ??= {};
+    fillMissing(s.folderTags, data.folderTags);
     s.promptTags ??= {};
     fillMissing(s.promptTags, data.promptTags);
     fillMissing(s.promptDesired, data.promptDesired);
@@ -607,7 +612,7 @@ function pickAndReadImportFile(onFolderData) {
                 return;
             }
             const hasFolderData = data && typeof data === 'object'
-                && (Array.isArray(data.folders) || (data.assignments && typeof data.assignments === 'object') || data.promptTags);
+                && (Array.isArray(data.folders) || (data.assignments && typeof data.assignments === 'object') || data.promptTags || data.folderTags);
             const hasPromptData = data && typeof data === 'object'
                 && (Array.isArray(data.prompts) || Array.isArray(data.prompt_order));
             if (!hasFolderData && !hasPromptData) {
@@ -654,6 +659,10 @@ function remapImportDataToParent(data, parentPath) {
     if (data.folderSnapshot && typeof data.folderSnapshot === 'object') {
         out.folderSnapshot = {};
         for (const [k, v] of Object.entries(data.folderSnapshot)) out.folderSnapshot[remap(k)] = v;
+    }
+    if (data.folderTags && typeof data.folderTags === 'object') {
+        out.folderTags = {};
+        for (const [k, v] of Object.entries(data.folderTags)) out.folderTags[remap(k)] = v;
     }
     if (data.excludedFolders && typeof data.excludedFolders === 'object') {
         out.excludedFolders = {};
