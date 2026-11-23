@@ -2,13 +2,13 @@
 
 Organize SillyTavern’s Chat Completion prompts into folders and nested subfolders, with an independent toggle at every level. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
-## 3.5.0 — Folder tags, preset group toggles & group exports
+## 3.6.0 — Registered tags popup picker
 
-Prompt and folder tags, group-level filter/rule exports, preset group enable/disable actions, drag-and-drop filter reordering, and the three import modes are available. Full and folder STPHE backups include prompt and folder tags; single-prompt backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
+A **Registered tags** button now sits beside the **Prompt tags** and **Folder tags** labels to open a floating popup listing every unique tag already registered on prompts or folders. Click tags in the popup to add them to the current draft just like pressing Enter, close it via **×**, clicking outside, or **Escape**, and click **Save** to apply. Prompt and folder tags, group-level filter/rule exports, preset group enable/disable actions, drag-and-drop filter reordering, and the three import modes remain available. Full and folder STPHE backups include prompt and folder tags; single-prompt backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
 
 New STPHE prompt exports also work with SillyTavern's native Prompt Manager importer. **Use STPHE's importer to restore tags, folders, and filter settings**; native SillyTavern reads only the prompt definitions and order. Append preserves existing tags; Replace matching applies imported tags. Older backups without tags keep existing tags. Filter group exports include their tag-matching criteria, not the tagged prompts or folders themselves.
 
-See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#350--folder-tags-preset-group-actions-reordering--group-exports).
+See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#360--registered-tags-popup-picker).
 
 ## Complete feature guides
 
@@ -42,7 +42,7 @@ The folder’s toggle mutes its contents. The adjacent check and cross buttons *
 
 ### Prompt and folder tags
 
-New and existing prompts have a **Prompt tags** field in the native prompt editor, and every named folder has a tag button on its row (and **Edit tags…** in its More actions menu). Type one tag and press **Enter**, then repeat to add more. Use **×** to remove a tag and **Save** to commit your changes. Closing or canceling discards unsaved tag edits. Empty tags and duplicate names (ignoring case) are skipped. Folder tags follow rename, move, and delete operations.
+New and existing prompts have a **Prompt tags** field in the native prompt editor, and every named folder has a tag button on its row (and **Edit tags…** in its More actions menu). Type one tag and press **Enter**, or click the **Registered tags** button right next to the **Prompt tags** / **Folder tags** label to open a scrollable popup of all registered prompt and folder tags and click tags to add them to the draft. Close the popup with **×**, by clicking outside it, or with **Escape**. Use **×** on a chip to remove a tag and **Save** to commit your changes. Closing or canceling discards unsaved tag edits. Empty tags and duplicate names (ignoring case) are skipped. Folder tags follow rename, move, and delete operations.
 
 In **Filter**, select **Tag (prompt / folder)** under **Match by**, enter the full tag name, and click **Apply**. Tag matching ignores case, matches both tagged prompts and tagged folders without scanning prompt content, respects folder scope and filter exclusions, and works with saved presets and the Chat filter's **Select prompts to affect** form.
 

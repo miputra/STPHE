@@ -495,6 +495,8 @@ body.pf-native-popup-open .pf-restore-btn {
 .pf-bm-body {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
     gap: 10px;
     overflow-y: auto;
     padding-top: 2px;
@@ -586,10 +588,112 @@ body.pf-native-popup-open .pf-restore-btn {
 .pf-group-add { width: auto; white-space: nowrap; }
 
 .pf-tag-editor { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
-.pf-tag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-tag-editor-header { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+.pf-tag-editor-header label { margin: 0; width: auto; flex: 0 0 auto; }
+.pf-tag-picker-btn { display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 2px 8px; margin: 0; font-size: 0.82em; line-height: 1.3; flex-shrink: 0; }
+.pf-tag-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; }
+.pf-tag-chips:empty { display: none; }
+.pf-tag-editor .pf-tag-chips { max-height: 120px; overflow-y: auto; overflow-x: hidden; padding: 2px 4px 2px 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.32) transparent; }
 .pf-tag-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--SmartThemeBorderColor); border-radius: 12px; padding: 2px 8px; max-width: 100%; overflow-wrap: anywhere; }
 .pf-tag-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1.2em; }
 .pf-tag-editor small { opacity: .75; }
+
+.pf-tag-picker-popup {
+    position: fixed;
+    z-index: 10050;
+    width: min(360px, calc(100vw - 16px));
+    max-height: min(320px, calc(100vh - 16px));
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+}
+.pf-tag-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+}
+.pf-tag-picker-close {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 1.25em;
+    line-height: 1;
+    padding: 0 4px;
+    opacity: 0.75;
+}
+.pf-tag-picker-close:hover { opacity: 1; }
+.pf-tag-picker-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 2px 6px 4px 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.32) transparent;
+    scrollbar-gutter: stable;
+}
+.pf-tag-picker-list::-webkit-scrollbar,
+.pf-tag-editor .pf-tag-chips::-webkit-scrollbar {
+    width: 6px;
+}
+.pf-tag-picker-list::-webkit-scrollbar-thumb,
+.pf-tag-editor .pf-tag-chips::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+}
+.pf-tag-picker-list::-webkit-scrollbar-track,
+.pf-tag-editor .pf-tag-chips::-webkit-scrollbar-track {
+    background: transparent;
+}
+.pf-tag-option {
+    display: inline-flex;
+    align-items: center;
+    text-align: left;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    background: transparent;
+    color: inherit;
+    border-radius: 12px;
+    padding: 3px 9px;
+    font-size: 0.88em;
+    line-height: 1.3;
+    cursor: pointer;
+    max-width: 100%;
+}
+.pf-tag-option:hover {
+    border-color: var(--active, #3ab6a3);
+    background: rgba(58, 182, 163, 0.14);
+}
+.pf-tag-option.pf-tag-option-added {
+    border-color: var(--active, #3ab6a3);
+    background: rgba(58, 182, 163, 0.22);
+}
+.pf-tag-picker-empty {
+    opacity: 0.75;
+    font-size: 0.9em;
+}
 
 .pf-preset-transfer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
 .pf-preset-transfer select { width: auto; flex: 1 1 150px; }

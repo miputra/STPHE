@@ -14,16 +14,198 @@ export function normalizeTags(tags) {
     }).map(tag => tag.trim());
 }
 
+/** Returns all unique tags currently registered on any prompt or folder, sorted case-insensitively. */
+export function collectRegisteredTags(s = typeof settings === 'function' ? settings() : null) {
+    const raw = [];
+    for (const bucket of [s?.promptTags, s?.folderTags]) {
+        if (!bucket || typeof bucket !== 'object') continue;
+        for (const list of Object.values(bucket)) {
+            if (Array.isArray(list)) raw.push(...list);
+        }
+    }
+    return normalizeTags(raw).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function nodeContains(container, target) {
+    if (!container || !target) return false;
+    if (container === target) return true;
+    if (typeof container.contains === 'function') return container.contains(target);
+    return Array.isArray(container.children) && container.children.some(child => nodeContains(child, target));
+}
+
+let activeTagPicker = null;
+
+/** Closes the floating registered-tags picker popup if open. */
+export function closeRegisteredTagsPopup() {
+    if (!activeTagPicker) {
+        if (typeof document !== 'undefined') document.getElementById?.('pf-tag-picker-popup')?.remove?.();
+        return;
+    }
+    const { popup, anchor, onOutside, onKeydown, onResize } = activeTagPicker;
+    activeTagPicker = null;
+    if (typeof document !== 'undefined') {
+        if (onOutside) {
+            document.removeEventListener?.('mousedown', onOutside, true);
+            document.removeEventListener?.('click', onOutside, false);
+        }
+        if (onKeydown) document.removeEventListener?.('keydown', onKeydown, true);
+    }
+    if (typeof window !== 'undefined' && onResize) {
+        window.removeEventListener?.('resize', onResize);
+    }
+    anchor?.setAttribute?.('aria-expanded', 'false');
+    popup?.remove?.();
+}
+
+function positionTagPickerPopup(popup, anchor) {
+    if (typeof anchor?.getBoundingClientRect !== 'function' || typeof popup?.getBoundingClientRect !== 'function') return;
+    if (typeof window === 'undefined' || !popup.style) return;
+    const pad = 8;
+    const gap = 6;
+    const vw = window.innerWidth || 1024;
+    const vh = window.innerHeight || 768;
+    const rect = anchor.getBoundingClientRect();
+
+    // Pick the vertical side with more space and cap maxHeight to that space
+    // so long tag lists always scroll inside the popup instead of overflowing off-screen.
+    const spaceBelow = Math.max(0, vh - pad - (rect.bottom + gap));
+    const spaceAbove = Math.max(0, (rect.top - gap) - pad);
+    const desiredMax = Math.min(320, Math.max(120, vh - pad * 2));
+    const openBelow = spaceBelow >= desiredMax || spaceBelow >= spaceAbove;
+    const availableHeight = openBelow ? spaceBelow : spaceAbove;
+    const clampedMaxHeight = Math.max(
+        120,
+        Math.min(desiredMax, availableHeight >= 120 ? availableHeight : vh - pad * 2),
+    );
+    popup.style.maxHeight = `${Math.floor(clampedMaxHeight)}px`;
+
+    popup.style.left = '0px';
+    popup.style.top = '0px';
+    const origin = popup.getBoundingClientRect();
+    const popRect = popup.getBoundingClientRect();
+
+    let left = rect.left;
+    left = Math.max(pad, Math.min(left, vw - popRect.width - pad));
+
+    let top;
+    if (openBelow && rect.bottom + gap + popRect.height <= vh - pad) {
+        top = rect.bottom + gap;
+    } else if (!openBelow && rect.top - gap - popRect.height >= pad) {
+        top = rect.top - gap - popRect.height;
+    } else {
+        top = openBelow
+            ? Math.max(pad, vh - pad - popRect.height)
+            : Math.max(pad, Math.min(rect.top - gap - popRect.height, vh - pad - popRect.height));
+    }
+    popup.style.left = `${Math.round(left - origin.left)}px`;
+    popup.style.top = `${Math.round(top - origin.top)}px`;
+}
+
+function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
+    if (typeof document === 'undefined' || !document.body) return null;
+    if (activeTagPicker?.anchor === anchor) {
+        closeRegisteredTagsPopup();
+        return null;
+    }
+    closeRegisteredTagsPopup();
+
+    const popup = el('div', 'pf-tag-picker-popup', {
+        id: 'pf-tag-picker-popup',
+        role: 'dialog',
+        'aria-label': 'Registered tags',
+    });
+    const header = el('div', 'pf-tag-picker-header');
+    const title = el('b', null, { text: 'Registered tags' });
+    const closeBtn = el('button', 'pf-tag-picker-close', {
+        type: 'button',
+        text: '×',
+        title: 'Close',
+        'aria-label': 'Close registered tags',
+    });
+    closeBtn.addEventListener('click', event => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        closeRegisteredTagsPopup();
+    });
+    header.append(title, closeBtn);
+
+    const list = el('div', 'pf-tag-picker-list');
+    const registered = collectRegisteredTags();
+    const optionButtons = [];
+    const syncAppliedState = () => {
+        const current = new Set(getTags().map(tag => tag.toLowerCase()));
+        for (const { tag, btn } of optionButtons) {
+            const added = current.has(tag.toLowerCase());
+            btn.classList?.toggle?.('pf-tag-option-added', added);
+            btn.setAttribute?.('aria-pressed', String(added));
+        }
+    };
+    if (registered.length === 0) {
+        list.append(el('div', 'pf-tag-picker-empty', { text: 'No registered tags yet.' }));
+    } else {
+        for (const tag of registered) {
+            const btn = el('button', 'pf-tag-option', { type: 'button', text: tag });
+            btn.addEventListener('click', event => {
+                event?.preventDefault?.();
+                event?.stopPropagation?.();
+                onSelect(tag);
+                syncAppliedState();
+            });
+            optionButtons.push({ tag, btn });
+            list.append(btn);
+        }
+        syncAppliedState();
+    }
+    popup.append(header, list);
+
+    const host = (typeof root?.closest === 'function' && root.closest('dialog[open]')) || document.body;
+    host.appendChild(popup);
+    positionTagPickerPopup(popup, anchor);
+
+    const onOutside = event => {
+        const target = event?.target;
+        if (nodeContains(popup, target) || nodeContains(anchor, target)) return;
+        closeRegisteredTagsPopup();
+    };
+    const onKeydown = event => {
+        if (event?.key !== 'Escape') return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        closeRegisteredTagsPopup();
+    };
+    const onResize = () => positionTagPickerPopup(popup, anchor);
+    document.addEventListener?.('mousedown', onOutside, true);
+    document.addEventListener?.('click', onOutside, false);
+    document.addEventListener?.('keydown', onKeydown, true);
+    if (typeof window !== 'undefined') window.addEventListener?.('resize', onResize);
+    anchor?.setAttribute?.('aria-expanded', 'true');
+    activeTagPicker = { popup, anchor, onOutside, onKeydown, onResize, syncAppliedState };
+    return popup;
+}
+
 /** Edits a draft. Only Save commits it; Cancel discards it. */
 export function createTagEditor(initialTags, {
     labelText = 'Prompt tags',
     inputId = 'pf-prompt-tag-input',
     ariaLabel = 'Add prompt tag',
-    hintText = 'Press Enter for each tag. Tags are saved with Save; × removes a tag.',
+    hintText = 'Press Enter for each tag or pick from Registered tags. Tags are saved with Save; × removes a tag.',
 } = {}) {
     let tags = normalizeTags(initialTags);
     const root = el('div', 'pf-tag-editor');
+    const header = el('div', 'pf-tag-editor-header');
     const label = el('label', null, { text: labelText, for: inputId });
+    const pickerBtn = el('button', 'menu_button pf-tag-picker-btn', {
+        type: 'button',
+        title: 'Choose from registered tags',
+        'aria-label': 'Open registered tags',
+        'aria-haspopup': 'dialog',
+        'aria-expanded': 'false',
+    });
+    pickerBtn.append(
+        el('span', 'fa-solid fa-tags', { 'aria-hidden': 'true' }),
+        el('span', null, { text: 'Registered tags' }),
+    );
+    header.append(label, pickerBtn);
     const chips = el('div', 'pf-tag-chips');
     const input = el('input', 'text_pole', {
         id: inputId, type: 'text', placeholder: 'Type a tag and press Enter',
@@ -38,26 +220,40 @@ export function createTagEditor(initialTags, {
             chip.append(el('span', null, { text: tag }), remove);
             chips.append(chip);
         }
+        if (activeTagPicker?.anchor === pickerBtn) activeTagPicker.syncAppliedState?.();
     };
+    const addTag = value => {
+        tags = normalizeTags([...tags, value]);
+        render();
+    };
+    pickerBtn.addEventListener('click', event => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        openRegisteredTagsPopup({
+            anchor: pickerBtn,
+            root,
+            getTags: () => tags.slice(),
+            onSelect: addTag,
+        });
+    });
     input.addEventListener('keydown', event => {
         if (event.key !== 'Enter' || event.isComposing) return;
         event.preventDefault();
         event.stopPropagation();
-        tags = normalizeTags([...tags, input.value]);
+        addTag(input.value);
         input.value = '';
-        render();
     });
-    root.append(label, chips, input, el('small', null, { text: hintText }));
+    root.append(header, chips, input, el('small', null, { text: hintText }));
     render();
     return {
         root,
         input,
+        pickerBtn,
         getTags: () => tags.slice(),
         commitInput: () => {
             if (typeof input.value === 'string' && input.value.trim()) {
-                tags = normalizeTags([...tags, input.value]);
+                addTag(input.value);
                 input.value = '';
-                render();
             }
             return tags.slice();
         },
@@ -66,6 +262,7 @@ export function createTagEditor(initialTags, {
 
 /** Closes the folder tag editor modal if open. */
 export function closeFolderTagsModal() {
+    closeRegisteredTagsPopup();
     document.getElementById('pf-folder-tags-overlay')?.remove();
 }
 
@@ -130,11 +327,13 @@ export function watchPromptTagEditor() {
         const id = button?.dataset.pmPrompt;
         const visible = form && form.style.display !== 'none' && form.getClientRects().length > 0;
         if (!visible || !id || id === 'undefined') {
+            closeRegisteredTagsPopup();
             active?.root.remove();
             active = null;
             return;
         }
         if (active?.id === id && active.root.isConnected) return;
+        closeRegisteredTagsPopup();
         active?.root.remove();
         const editor = createTagEditor(settings().promptTags[id]);
         active = { ...editor, id };
@@ -150,6 +349,7 @@ export function watchPromptTagEditor() {
         settings().promptTags[active.id] = active.getTags();
         save();
         scheduleAutoFilterEval(0);
+        closeRegisteredTagsPopup();
         active.root.remove();
         active = null;
     }, true);
