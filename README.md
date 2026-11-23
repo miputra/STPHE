@@ -2,13 +2,13 @@
 
 Organize SillyTavern’s Chat Completion prompts into folders and nested subfolders, with an independent toggle at every level. **Author: miputra.** Formerly Prompt Folders; existing settings and exports remain compatible.
 
-## 3.4.0 — Tags and compatible imports
+## 3.5.0 — Folder tags, preset group toggles & group exports
 
 Prompt and folder tags, group-level filter/rule exports, preset group enable/disable actions, drag-and-drop filter reordering, and the three import modes are available. Full and folder STPHE backups include prompt and folder tags; single-prompt backups include prompt tags. Native SillyTavern v1 prompt exports and older flat STPHE backups are accepted.
 
-New STPHE prompt exports also work with SillyTavern's native Prompt Manager importer. **Use STPHE's importer to restore tags, folders, and filter settings**; native SillyTavern reads only the prompt definitions and order. Append preserves existing tags; Replace matching applies imported tags. Older backups without tags keep existing tags. Individual filter exports include their tag-matching criteria, not the tagged prompts themselves.
+New STPHE prompt exports also work with SillyTavern's native Prompt Manager importer. **Use STPHE's importer to restore tags, folders, and filter settings**; native SillyTavern reads only the prompt definitions and order. Append preserves existing tags; Replace matching applies imported tags. Older backups without tags keep existing tags. Filter group exports include their tag-matching criteria, not the tagged prompts or folders themselves.
 
-See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#340--tags-and-compatible-imports).
+See the [compatibility table](https://miputra.github.io/STPHE-Documentation/backups.html#compatibility) and [release notes](https://github.com/miputra/STPHE-Documentation/blob/main/docs/reference.md#350--folder-tags-preset-group-actions-reordering--group-exports).
 
 ## Complete feature guides
 
