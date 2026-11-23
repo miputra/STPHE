@@ -26,6 +26,28 @@ export function collectRegisteredTags(s = typeof settings === 'function' ? setti
     return normalizeTags(raw).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
+/** Filters registered tags for autocomplete: excludes already-applied tags (case-insensitively)
+ *  and ranks prefix matches ahead of substring matches while keeping alphabetical order within each group. */
+export function filterRegisteredTagSuggestions(query, registered = collectRegisteredTags(), excludeTags = []) {
+    const excluded = new Set(
+        (Array.isArray(excludeTags) ? excludeTags : [])
+            .filter(t => typeof t === 'string' && t.trim())
+            .map(t => t.trim().toLowerCase()),
+    );
+    const available = (Array.isArray(registered) ? registered : [])
+        .filter(tag => typeof tag === 'string' && tag.trim() && !excluded.has(tag.trim().toLowerCase()));
+    const q = String(query ?? '').trim().toLowerCase();
+    if (!q) return available;
+    const prefix = [];
+    const contains = [];
+    for (const tag of available) {
+        const lower = tag.toLowerCase();
+        if (lower.startsWith(q)) prefix.push(tag);
+        else if (lower.includes(q)) contains.push(tag);
+    }
+    return [...prefix, ...contains];
+}
+
 function nodeContains(container, target) {
     if (!container || !target) return false;
     if (container === target) return true;
@@ -33,7 +55,233 @@ function nodeContains(container, target) {
     return Array.isArray(container.children) && container.children.some(child => nodeContains(child, target));
 }
 
+function positionFloatingBox(box, anchor, { maxHeight = 320, matchWidth = false } = {}) {
+    if (typeof anchor?.getBoundingClientRect !== 'function' || typeof box?.getBoundingClientRect !== 'function') return;
+    if (typeof window === 'undefined' || !box.style) return;
+    const pad = 8;
+    const gap = 6;
+    const vw = window.innerWidth || 1024;
+    const vh = window.innerHeight || 768;
+    const rect = anchor.getBoundingClientRect();
+
+    if (matchWidth) {
+        const minW = Math.min(220, Math.max(120, vw - pad * 2));
+        const width = Math.max(minW, Math.min(rect.width || minW, vw - pad * 2));
+        box.style.width = `${Math.round(width)}px`;
+    }
+
+    // Pick the vertical side with more space and cap maxHeight to that space
+    // so long tag lists always scroll inside the popup instead of overflowing off-screen.
+    const spaceBelow = Math.max(0, vh - pad - (rect.bottom + gap));
+    const spaceAbove = Math.max(0, (rect.top - gap) - pad);
+    const desiredMax = Math.min(maxHeight, Math.max(120, vh - pad * 2));
+    const openBelow = spaceBelow >= desiredMax || spaceBelow >= spaceAbove;
+    const availableHeight = openBelow ? spaceBelow : spaceAbove;
+    const clampedMaxHeight = Math.max(
+        120,
+        Math.min(desiredMax, availableHeight >= 120 ? availableHeight : vh - pad * 2),
+    );
+    box.style.maxHeight = `${Math.floor(clampedMaxHeight)}px`;
+
+    box.style.left = '0px';
+    box.style.top = '0px';
+    const origin = box.getBoundingClientRect();
+    const popRect = box.getBoundingClientRect();
+
+    let left = rect.left;
+    left = Math.max(pad, Math.min(left, vw - popRect.width - pad));
+
+    let top;
+    if (openBelow && rect.bottom + gap + popRect.height <= vh - pad) {
+        top = rect.bottom + gap;
+    } else if (!openBelow && rect.top - gap - popRect.height >= pad) {
+        top = rect.top - gap - popRect.height;
+    } else {
+        top = openBelow
+            ? Math.max(pad, vh - pad - popRect.height)
+            : Math.max(pad, Math.min(rect.top - gap - popRect.height, vh - pad - popRect.height));
+    }
+    box.style.left = `${Math.round(left - origin.left)}px`;
+    box.style.top = `${Math.round(top - origin.top)}px`;
+}
+
 let activeTagPicker = null;
+let activeTagAutocomplete = null;
+
+/** Closes the floating registered-tags autocomplete dropdown if open. */
+export function closeTagAutocomplete() {
+    if (!activeTagAutocomplete) {
+        if (typeof document !== 'undefined') document.getElementById?.('pf-tag-autocomplete')?.remove?.();
+        return;
+    }
+    const { dropdown, input, onOutside, onResize } = activeTagAutocomplete;
+    activeTagAutocomplete = null;
+    if (typeof document !== 'undefined' && onOutside) {
+        document.removeEventListener?.('mousedown', onOutside, true);
+    }
+    if (typeof window !== 'undefined' && onResize) {
+        window.removeEventListener?.('resize', onResize);
+    }
+    input?.setAttribute?.('aria-expanded', 'false');
+    dropdown?.remove?.();
+}
+
+/** Attaches registered-tags autocomplete to a text input (prompt tags, folder tags, or filter tag inputs). */
+export function attachTagAutocomplete(input, {
+    isEnabled = () => true,
+    getExcludeTags = () => [],
+    onSelect,
+    bindKeydown = true,
+} = {}) {
+    if (!input) return { handleKeydown: () => false, close: () => {}, refresh: () => {} };
+    let suppressInput = false;
+
+    const close = () => {
+        if (activeTagAutocomplete?.input === input) closeTagAutocomplete();
+    };
+
+    const setActiveIndex = nextIdx => {
+        if (!activeTagAutocomplete || activeTagAutocomplete.input !== input) return;
+        const { items } = activeTagAutocomplete;
+        if (!items.length) { activeTagAutocomplete.activeIndex = -1; return; }
+        const idx = ((nextIdx % items.length) + items.length) % items.length;
+        activeTagAutocomplete.activeIndex = idx;
+        items.forEach(({ btn }, i) => {
+            const active = i === idx;
+            btn.classList?.toggle?.('pf-tag-ac-active', active);
+            btn.setAttribute?.('aria-selected', String(active));
+            if (active) btn.scrollIntoView?.({ block: 'nearest' });
+        });
+    };
+
+    const selectTag = tag => {
+        suppressInput = true;
+        try {
+            close();
+            if (typeof onSelect === 'function') onSelect(tag);
+            else input.value = tag;
+        } finally {
+            suppressInput = false;
+        }
+    };
+
+    const openWith = ({ allowEmpty = false } = {}) => {
+        if (typeof document === 'undefined' || !document.body) return;
+        if (!isEnabled()) { close(); return; }
+        const query = String(input.value ?? '');
+        if (!allowEmpty && !query.trim()) { close(); return; }
+        const suggestions = filterRegisteredTagSuggestions(query, collectRegisteredTags(), getExcludeTags());
+        if (!suggestions.length) { close(); return; }
+        // If the user already typed the exact and only matching tag, don't cover buttons below with a redundant 1-item menu.
+        if (!allowEmpty && suggestions.length === 1 && suggestions[0].toLowerCase() === query.trim().toLowerCase()) {
+            close();
+            return;
+        }
+
+        closeRegisteredTagsPopup();
+        closeTagAutocomplete();
+
+        const dropdown = el('div', 'pf-tag-autocomplete', {
+            id: 'pf-tag-autocomplete',
+            role: 'listbox',
+            'aria-label': 'Registered tag suggestions',
+        });
+        const items = [];
+        for (let i = 0; i < suggestions.length; i++) {
+            const tag = suggestions[i];
+            const btn = el('button', 'pf-tag-ac-item', {
+                type: 'button',
+                role: 'option',
+                'aria-selected': 'false',
+                text: tag,
+            });
+            btn.addEventListener('mousedown', event => {
+                // Keep focus on the input so blur doesn't tear down the dropdown before click fires.
+                event?.preventDefault?.();
+            });
+            btn.addEventListener('click', event => {
+                event?.preventDefault?.();
+                event?.stopPropagation?.();
+                selectTag(tag);
+            });
+            btn.addEventListener('mouseenter', () => {
+                if (activeTagAutocomplete?.input === input) setActiveIndex(i);
+            });
+            items.push({ tag, btn });
+            dropdown.append(btn);
+        }
+
+        const host = (typeof input.closest === 'function' && input.closest('dialog[open]')) || document.body;
+        host.appendChild(dropdown);
+        positionFloatingBox(dropdown, input, { maxHeight: 220, matchWidth: true });
+
+        const onOutside = event => {
+            const target = event?.target;
+            if (nodeContains(dropdown, target) || nodeContains(input, target)) return;
+            closeTagAutocomplete();
+        };
+        const onResize = () => positionFloatingBox(dropdown, input, { maxHeight: 220, matchWidth: true });
+        document.addEventListener?.('mousedown', onOutside, true);
+        if (typeof window !== 'undefined') window.addEventListener?.('resize', onResize);
+        input.setAttribute?.('aria-expanded', 'true');
+        activeTagAutocomplete = { dropdown, input, items, activeIndex: -1, onOutside, onResize };
+    };
+
+    const handleKeydown = event => {
+        if (!event || event.isComposing || !isEnabled()) return false;
+        const isOpen = activeTagAutocomplete?.input === input;
+        if (event.key === 'ArrowDown') {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            if (!isOpen) openWith({ allowEmpty: true });
+            if (activeTagAutocomplete?.input === input) {
+                setActiveIndex(activeTagAutocomplete.activeIndex < 0 ? 0 : activeTagAutocomplete.activeIndex + 1);
+            }
+            return true;
+        }
+        if (event.key === 'ArrowUp') {
+            if (!isOpen) return false;
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            setActiveIndex(activeTagAutocomplete.activeIndex <= 0
+                ? activeTagAutocomplete.items.length - 1
+                : activeTagAutocomplete.activeIndex - 1);
+            return true;
+        }
+        if (event.key === 'Tab' && isOpen && activeTagAutocomplete.items.length > 0) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            const idx = activeTagAutocomplete.activeIndex >= 0 ? activeTagAutocomplete.activeIndex : 0;
+            selectTag(activeTagAutocomplete.items[idx].tag);
+            return true;
+        }
+        if (event.key === 'Enter' && isOpen && activeTagAutocomplete.activeIndex >= 0) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            selectTag(activeTagAutocomplete.items[activeTagAutocomplete.activeIndex].tag);
+            return true;
+        }
+        if (event.key === 'Escape' && isOpen) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            close();
+            return true;
+        }
+        return false;
+    };
+
+    input.setAttribute?.('autocomplete', 'off');
+    input.setAttribute?.('aria-autocomplete', 'list');
+    input.setAttribute?.('aria-expanded', 'false');
+    input.addEventListener('input', () => {
+        if (suppressInput) return;
+        openWith({ allowEmpty: false });
+    });
+    input.addEventListener('blur', () => close());
+    if (bindKeydown) input.addEventListener('keydown', handleKeydown);
+
+    return { handleKeydown, close, refresh: () => openWith({ allowEmpty: false }) };
+}
 
 /** Closes the floating registered-tags picker popup if open. */
 export function closeRegisteredTagsPopup() {
@@ -57,56 +305,13 @@ export function closeRegisteredTagsPopup() {
     popup?.remove?.();
 }
 
-function positionTagPickerPopup(popup, anchor) {
-    if (typeof anchor?.getBoundingClientRect !== 'function' || typeof popup?.getBoundingClientRect !== 'function') return;
-    if (typeof window === 'undefined' || !popup.style) return;
-    const pad = 8;
-    const gap = 6;
-    const vw = window.innerWidth || 1024;
-    const vh = window.innerHeight || 768;
-    const rect = anchor.getBoundingClientRect();
-
-    // Pick the vertical side with more space and cap maxHeight to that space
-    // so long tag lists always scroll inside the popup instead of overflowing off-screen.
-    const spaceBelow = Math.max(0, vh - pad - (rect.bottom + gap));
-    const spaceAbove = Math.max(0, (rect.top - gap) - pad);
-    const desiredMax = Math.min(320, Math.max(120, vh - pad * 2));
-    const openBelow = spaceBelow >= desiredMax || spaceBelow >= spaceAbove;
-    const availableHeight = openBelow ? spaceBelow : spaceAbove;
-    const clampedMaxHeight = Math.max(
-        120,
-        Math.min(desiredMax, availableHeight >= 120 ? availableHeight : vh - pad * 2),
-    );
-    popup.style.maxHeight = `${Math.floor(clampedMaxHeight)}px`;
-
-    popup.style.left = '0px';
-    popup.style.top = '0px';
-    const origin = popup.getBoundingClientRect();
-    const popRect = popup.getBoundingClientRect();
-
-    let left = rect.left;
-    left = Math.max(pad, Math.min(left, vw - popRect.width - pad));
-
-    let top;
-    if (openBelow && rect.bottom + gap + popRect.height <= vh - pad) {
-        top = rect.bottom + gap;
-    } else if (!openBelow && rect.top - gap - popRect.height >= pad) {
-        top = rect.top - gap - popRect.height;
-    } else {
-        top = openBelow
-            ? Math.max(pad, vh - pad - popRect.height)
-            : Math.max(pad, Math.min(rect.top - gap - popRect.height, vh - pad - popRect.height));
-    }
-    popup.style.left = `${Math.round(left - origin.left)}px`;
-    popup.style.top = `${Math.round(top - origin.top)}px`;
-}
-
-function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
+export function openRegisteredTagsPopup({ anchor, root, getTags, onSelect, closeOnSelect = false }) {
     if (typeof document === 'undefined' || !document.body) return null;
     if (activeTagPicker?.anchor === anchor) {
         closeRegisteredTagsPopup();
         return null;
     }
+    closeTagAutocomplete();
     closeRegisteredTagsPopup();
 
     const popup = el('div', 'pf-tag-picker-popup', {
@@ -133,7 +338,7 @@ function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
     const registered = collectRegisteredTags();
     const optionButtons = [];
     const syncAppliedState = () => {
-        const current = new Set(getTags().map(tag => tag.toLowerCase()));
+        const current = new Set((getTags?.() || []).map(tag => tag.toLowerCase()));
         for (const { tag, btn } of optionButtons) {
             const added = current.has(tag.toLowerCase());
             btn.classList?.toggle?.('pf-tag-option-added', added);
@@ -149,7 +354,8 @@ function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
                 event?.preventDefault?.();
                 event?.stopPropagation?.();
                 onSelect(tag);
-                syncAppliedState();
+                if (closeOnSelect) closeRegisteredTagsPopup();
+                else syncAppliedState();
             });
             optionButtons.push({ tag, btn });
             list.append(btn);
@@ -160,7 +366,7 @@ function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
 
     const host = (typeof root?.closest === 'function' && root.closest('dialog[open]')) || document.body;
     host.appendChild(popup);
-    positionTagPickerPopup(popup, anchor);
+    positionFloatingBox(popup, anchor, { maxHeight: 320, matchWidth: false });
 
     const onOutside = event => {
         const target = event?.target;
@@ -173,7 +379,7 @@ function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
         event.stopPropagation?.();
         closeRegisteredTagsPopup();
     };
-    const onResize = () => positionTagPickerPopup(popup, anchor);
+    const onResize = () => positionFloatingBox(popup, anchor, { maxHeight: 320, matchWidth: false });
     document.addEventListener?.('mousedown', onOutside, true);
     document.addEventListener?.('click', onOutside, false);
     document.addEventListener?.('keydown', onKeydown, true);
@@ -181,6 +387,17 @@ function openRegisteredTagsPopup({ anchor, root, getTags, onSelect }) {
     anchor?.setAttribute?.('aria-expanded', 'true');
     activeTagPicker = { popup, anchor, onOutside, onKeydown, onResize, syncAppliedState };
     return popup;
+}
+
+/** Wires a Registered tags button so clicking it toggles the floating registered-tags popup. */
+export function bindRegisteredTagsButton(btn, { root, getTags, onSelect, closeOnSelect = false } = {}) {
+    if (!btn) return null;
+    btn.addEventListener('click', event => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        openRegisteredTagsPopup({ anchor: btn, root: root || btn, getTags, onSelect, closeOnSelect });
+    });
+    return btn;
 }
 
 /** Edits a draft. Only Save commits it; Cancel discards it. */
@@ -226,22 +443,28 @@ export function createTagEditor(initialTags, {
         tags = normalizeTags([...tags, value]);
         render();
     };
-    pickerBtn.addEventListener('click', event => {
-        event?.preventDefault?.();
-        event?.stopPropagation?.();
-        openRegisteredTagsPopup({
-            anchor: pickerBtn,
-            root,
-            getTags: () => tags.slice(),
-            onSelect: addTag,
-        });
+    bindRegisteredTagsButton(pickerBtn, {
+        root,
+        getTags: () => tags.slice(),
+        onSelect: addTag,
+        closeOnSelect: false,
+    });
+    const autocomplete = attachTagAutocomplete(input, {
+        getExcludeTags: () => tags,
+        onSelect: tag => {
+            addTag(tag);
+            input.value = '';
+        },
+        bindKeydown: false,
     });
     input.addEventListener('keydown', event => {
+        if (autocomplete.handleKeydown(event)) return;
         if (event.key !== 'Enter' || event.isComposing) return;
         event.preventDefault();
         event.stopPropagation();
         addTag(input.value);
         input.value = '';
+        autocomplete.close();
     });
     root.append(header, chips, input, el('small', null, { text: hintText }));
     render();
@@ -255,6 +478,7 @@ export function createTagEditor(initialTags, {
                 addTag(input.value);
                 input.value = '';
             }
+            autocomplete.close();
             return tags.slice();
         },
     };
@@ -263,6 +487,7 @@ export function createTagEditor(initialTags, {
 /** Closes the folder tag editor modal if open. */
 export function closeFolderTagsModal() {
     closeRegisteredTagsPopup();
+    closeTagAutocomplete();
     document.getElementById('pf-folder-tags-overlay')?.remove();
 }
 
@@ -327,14 +552,20 @@ export function watchPromptTagEditor() {
         const id = button?.dataset.pmPrompt;
         const visible = form && form.style.display !== 'none' && form.getClientRects().length > 0;
         if (!visible || !id || id === 'undefined') {
-            closeRegisteredTagsPopup();
-            active?.root.remove();
-            active = null;
+            if (active) {
+                closeRegisteredTagsPopup();
+                closeTagAutocomplete();
+                active.root.remove();
+                active = null;
+            }
             return;
         }
         if (active?.id === id && active.root.isConnected) return;
-        closeRegisteredTagsPopup();
-        active?.root.remove();
+        if (active) {
+            closeRegisteredTagsPopup();
+            closeTagAutocomplete();
+            active.root.remove();
+        }
         const editor = createTagEditor(settings().promptTags[id]);
         active = { ...editor, id };
         const footer = button.closest('[class$="prompt_manager_popup_entry_form_footer"]');
@@ -350,6 +581,7 @@ export function watchPromptTagEditor() {
         save();
         scheduleAutoFilterEval(0);
         closeRegisteredTagsPopup();
+        closeTagAutocomplete();
         active.root.remove();
         active = null;
     }, true);

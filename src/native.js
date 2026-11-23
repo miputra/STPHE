@@ -4,7 +4,7 @@ import { closeBulkMatchModal } from './bulk-match.js';
 import { closeContextMenu } from './context-menu.js';
 import { assignPrompt } from './folders.js';
 import { closeImportConflictsModal, restorePromptsFromImport } from './import-export.js';
-import { closeFolderTagsModal, closeRegisteredTagsPopup } from './prompt-tags.js';
+import { closeFolderTagsModal, closeRegisteredTagsPopup, closeTagAutocomplete } from './prompt-tags.js';
 import { liveCache, promptByIdentifier, renderTree } from './render.js';
 import { SELECTORS, el, escapeHtml, flattenPromptOrder, moveEntryInOrder, save, settings, toastError, toastWarn } from './state.js';
 
@@ -412,6 +412,7 @@ export function closeOwnOverlays() {
     closeImportConflictsModal();
     if (typeof closeFolderTagsModal === 'function') closeFolderTagsModal();
     if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+    if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
 }
 
 // ---------- Native add / delete / rename / view flows ----------

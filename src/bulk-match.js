@@ -3,6 +3,7 @@ import { buildFilterGroups, isFilterGroupDisabled, isFilterGroupPathDisabled, or
 //
 import { AUTO_MATCH_TYPES, autoMatchDef, evaluateAutoCondition } from './auto-filter.js';
 import { closeOwnOverlays, lockTextareaReadOnly, peekContent } from './native.js';
+import { attachTagAutocomplete, bindRegisteredTagsButton, closeRegisteredTagsPopup, closeTagAutocomplete } from './prompt-tags.js';
 import { liveCache, setFolderMaster, setPromptsLogicalState, toggleFolderMaster } from './render.js';
 import { ROOT, el, escapeHtml, isDescendantOrSelf, save, settings } from './state.js';
 
@@ -687,6 +688,8 @@ let bulkMatchState = null; // { scopePath, matched: [], regexCache: [] } while t
  *  and clears bulkMatchState. */
 export function closeBulkMatchModal() {
     closeBulkMatchValuePreview();
+    if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+    if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
     document.getElementById('pf-bm-overlay')?.remove();
     bulkMatchState = null;
 }
@@ -739,8 +742,11 @@ export function openBulkMatchModal(scopePath) {
                 </div>
                 <div id="pf-bm-xml-block" style="display:none"></div>
                 <div class="pf-bm-row" id="pf-bm-text-row" style="display:none">
-                    <label id="pf-bm-text-label" for="pf-bm-text">Word</label>
-                    <input type="text" id="pf-bm-text" class="text_pole" />
+                    <div class="pf-tag-editor-header">
+                        <label id="pf-bm-text-label" for="pf-bm-text">Word</label>
+                        <button type="button" class="menu_button pf-tag-picker-btn" id="pf-bm-tag-picker-btn" title="Choose from registered tags" aria-label="Open registered tags" aria-haspopup="dialog" aria-expanded="false" style="display:none"><span class="fa-solid fa-tags" aria-hidden="true"></span><span>Registered tags</span></button>
+                    </div>
+                    <input type="text" id="pf-bm-text" class="text_pole" autocomplete="off" />
                 </div>
                 <div class="pf-bm-row pf-bm-radio-row" id="pf-bm-case-row" style="display:none">
                     <label><input type="checkbox" id="pf-bm-case" /> Case sensitive</label>
@@ -797,8 +803,11 @@ export function openBulkMatchModal(scopePath) {
                         </div>
                         <div id="pf-bm-sel-xml-block" style="display:none"></div>
                         <div class="pf-bm-row" id="pf-bm-sel-text-row" style="display:none">
-                            <label id="pf-bm-sel-text-label" for="pf-bm-sel-text">Word</label>
-                            <input type="text" id="pf-bm-sel-text" class="text_pole" />
+                            <div class="pf-tag-editor-header">
+                                <label id="pf-bm-sel-text-label" for="pf-bm-sel-text">Word</label>
+                                <button type="button" class="menu_button pf-tag-picker-btn" id="pf-bm-sel-tag-picker-btn" title="Choose from registered tags" aria-label="Open registered tags" aria-haspopup="dialog" aria-expanded="false" style="display:none"><span class="fa-solid fa-tags" aria-hidden="true"></span><span>Registered tags</span></button>
+                            </div>
+                            <input type="text" id="pf-bm-sel-text" class="text_pole" autocomplete="off" />
                         </div>
                         <div class="pf-bm-row pf-bm-radio-row" id="pf-bm-sel-case-row" style="display:none">
                             <label><input type="checkbox" id="pf-bm-sel-case" /> Case sensitive</label>
@@ -901,6 +910,7 @@ export function openBulkMatchModal(scopePath) {
     const selTextRow = document.getElementById('pf-bm-sel-text-row');
     const selTextLabel = document.getElementById('pf-bm-sel-text-label');
     const selTextInput = document.getElementById('pf-bm-sel-text');
+    const selTagPickerBtn = document.getElementById('pf-bm-sel-tag-picker-btn');
     const selCaseRow = document.getElementById('pf-bm-sel-case-row');
     const selCaseCb = document.getElementById('pf-bm-sel-case');
     const selRegexValueRow = document.getElementById('pf-bm-sel-regexvalue-row');
@@ -916,6 +926,7 @@ export function openBulkMatchModal(scopePath) {
     const textRow = document.getElementById('pf-bm-text-row');
     const textLabel = document.getElementById('pf-bm-text-label');
     const textInput = document.getElementById('pf-bm-text');
+    const tagPickerBtn = document.getElementById('pf-bm-tag-picker-btn');
     const caseRow = document.getElementById('pf-bm-case-row');
     const caseCb = document.getElementById('pf-bm-case');
     const regexValueRow = document.getElementById('pf-bm-regexvalue-row');
@@ -959,13 +970,46 @@ export function openBulkMatchModal(scopePath) {
     const selXmlPicker = createXmlPicker(selXmlBlock, { getScopePath: () => scopePath, getMode: () => 'filter' });
     selXmlPicker.onChange(() => resetResults());
 
+    const applyPickedTag = (inputEl, tag) => {
+        resetResults();
+        inputEl.value = tag;
+        inputEl.focus?.();
+    };
+    if (typeof bindRegisteredTagsButton === 'function') {
+        bindRegisteredTagsButton(tagPickerBtn, {
+            root: textRow,
+            getTags: () => (textInput.value.trim() ? [textInput.value.trim()] : []),
+            onSelect: tag => applyPickedTag(textInput, tag),
+            closeOnSelect: true,
+        });
+        bindRegisteredTagsButton(selTagPickerBtn, {
+            root: selTextRow,
+            getTags: () => (selTextInput.value.trim() ? [selTextInput.value.trim()] : []),
+            onSelect: tag => applyPickedTag(selTextInput, tag),
+            closeOnSelect: true,
+        });
+    }
+    if (typeof attachTagAutocomplete === 'function') {
+        attachTagAutocomplete(textInput, {
+            isEnabled: () => sourceSelect.value !== 'chat' && typeSelect.value === 'tag',
+            onSelect: tag => applyPickedTag(textInput, tag),
+        });
+        attachTagAutocomplete(selTextInput, {
+            isEnabled: () => sourceSelect.value === 'chat' && selModeSelect.value === 'tag',
+            onSelect: tag => applyPickedTag(selTextInput, tag),
+        });
+    }
+
     function updateVisibility() {
         resetResults();
         resetRegexValues();
+        if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+        if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
         hint.textContent = '';
         const type = typeSelect.value;
         xmlBlock.style.display = type === 'xml' ? '' : 'none';
         textRow.style.display = (type === 'tag' || type === 'word' || type === 'regex' || type === 'regexValues') ? 'flex' : 'none';
+        if (tagPickerBtn) tagPickerBtn.style.display = type === 'tag' ? '' : 'none';
         caseRow.style.display = type === 'word' ? 'flex' : 'none';
         if (type === 'tag') { textLabel.textContent = 'Tag'; textInput.placeholder = 'Exact tag name (ignores case)'; }
         if (type === 'word') { textLabel.textContent = 'Word'; textInput.placeholder = 'e.g. tavern'; }
@@ -1025,11 +1069,14 @@ export function openBulkMatchModal(scopePath) {
 
     function updateSelectVisibility() {
         resetResults();
+        if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+        if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
         hint.textContent = '';
         const mode = selModeSelect.value;
         bulkMatchState.selMode = mode;
         selXmlBlock.style.display = mode === 'xml' ? '' : 'none';
         selTextRow.style.display = (mode === 'tag' || mode === 'word' || mode === 'regex' || mode === 'regexValues') ? 'flex' : 'none';
+        if (selTagPickerBtn) selTagPickerBtn.style.display = mode === 'tag' ? '' : 'none';
         selCaseRow.style.display = mode === 'word' ? 'flex' : 'none';
         selManualBlock.style.display = mode === 'manual' ? '' : 'none';
         selRegexValueRow.style.display = 'none';

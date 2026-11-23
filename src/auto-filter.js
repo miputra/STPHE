@@ -6,6 +6,7 @@ import { eventSource, event_types } from '../../../../../script.js';
 import { LEGACY_XML_TAGS, ancestorChain, collectXmlParams, computeMatches, createXmlPicker, isExcludedFromAutoFilter, isFolderExcludedFromAutoFilter, xmlContentMatches } from './bulk-match.js';
 import { attachDndHandlers } from './dnd.js';
 import { closeOwnOverlays, peekContent } from './native.js';
+import { attachTagAutocomplete, bindRegisteredTagsButton, closeRegisteredTagsPopup, closeTagAutocomplete } from './prompt-tags.js';
 import { isPromptLogicallyEnabled, liveCache, setFolderMaster, setPromptsLogicalState } from './render.js';
 import { ROOT, SELECTORS, el, escapeHtml, save, settings } from './state.js';
 
@@ -446,6 +447,8 @@ let autoFilterEditingId = null; // non-null while the form below is editing an e
 
 /** Closes the Auto Filter modal and clears which rule (if any) was being edited. */
 export function closeAutoFilterModal() {
+    if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+    if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
     document.getElementById('pf-af-overlay')?.remove();
     autoFilterEditingId = null;
 }
@@ -535,8 +538,11 @@ export function openAutoFilterModal() {
                         </div>
                         <div id="pf-af-eff-xml-block" style="display:none"></div>
                         <div class="pf-bm-row" id="pf-af-eff-text-row" style="display:none">
-                            <label id="pf-af-eff-text-label" for="pf-af-eff-text">Word</label>
-                            <input type="text" id="pf-af-eff-text" class="text_pole" />
+                            <div class="pf-tag-editor-header">
+                                <label id="pf-af-eff-text-label" for="pf-af-eff-text">Word</label>
+                                <button type="button" class="menu_button pf-tag-picker-btn" id="pf-af-eff-tag-picker-btn" title="Choose from registered tags" aria-label="Open registered tags" aria-haspopup="dialog" aria-expanded="false" style="display:none"><span class="fa-solid fa-tags" aria-hidden="true"></span><span>Registered tags</span></button>
+                            </div>
+                            <input type="text" id="pf-af-eff-text" class="text_pole" autocomplete="off" />
                         </div>
                         <div class="pf-bm-row pf-bm-radio-row" id="pf-af-eff-case-row" style="display:none">
                             <label><input type="checkbox" id="pf-af-eff-case" /> Case sensitive</label>
@@ -602,6 +608,7 @@ export function openAutoFilterModal() {
     const effTextRow = document.getElementById('pf-af-eff-text-row');
     const effTextLabel = document.getElementById('pf-af-eff-text-label');
     const effTextInput = document.getElementById('pf-af-eff-text');
+    const effTagPickerBtn = document.getElementById('pf-af-eff-tag-picker-btn');
     const effCaseRow = document.getElementById('pf-af-eff-case-row');
     const effCaseCb = document.getElementById('pf-af-eff-case');
     const effFoldersList = document.getElementById('pf-af-eff-folders-list');
@@ -659,10 +666,32 @@ export function openAutoFilterModal() {
     condType.addEventListener('change', updateCondVisibility);
     updateCondVisibility();
 
+    const applyPickedEffTag = tag => {
+        effTextInput.value = tag;
+        effTextInput.focus?.();
+    };
+    if (typeof bindRegisteredTagsButton === 'function') {
+        bindRegisteredTagsButton(effTagPickerBtn, {
+            root: effTextRow,
+            getTags: () => (effTextInput.value.trim() ? [effTextInput.value.trim()] : []),
+            onSelect: applyPickedEffTag,
+            closeOnSelect: true,
+        });
+    }
+    if (typeof attachTagAutocomplete === 'function') {
+        attachTagAutocomplete(effTextInput, {
+            isEnabled: () => effModeSelect.value === 'match' && autoMatchDef(effType.value)?.kind === 'tag',
+            onSelect: applyPickedEffTag,
+        });
+    }
+
     function updateEffMatchTypeVisibility() {
+        if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+        if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
         const def = autoMatchDef(effType.value);
         effXmlBlock.style.display = def?.kind === 'xml' ? '' : 'none';
         effTextRow.style.display = (def?.kind === 'tag' || def?.kind === 'regex' || def?.kind === 'word') ? 'flex' : 'none';
+        if (effTagPickerBtn) effTagPickerBtn.style.display = def?.kind === 'tag' ? '' : 'none';
         effCaseRow.style.display = def?.kind === 'word' ? 'flex' : 'none';
         if (def?.kind === 'regex') { effTextLabel.textContent = 'Regex'; effTextInput.placeholder = 'e.g. \\btavern\\b'; }
         if (def?.kind === 'tag') { effTextLabel.textContent = 'Tag'; effTextInput.placeholder = 'Exact tag name (ignores case)'; }
@@ -698,6 +727,8 @@ export function openAutoFilterModal() {
         }
     }
     function updateEffVisibility() {
+        if (typeof closeRegisteredTagsPopup === 'function') closeRegisteredTagsPopup();
+        if (typeof closeTagAutocomplete === 'function') closeTagAutocomplete();
         const mode = effModeSelect.value;
         effMatchBlock.style.display = mode === 'match' ? '' : 'none';
         effManualBlock.style.display = mode === 'manual' ? '' : 'none';
